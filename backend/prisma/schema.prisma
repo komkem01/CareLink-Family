@@ -1,0 +1,686 @@
+// This is your Prisma schema file
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// 🔐 USER & AUTHENTICATION MODELS
+// ============================================
+
+model FamilyUser {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String   // Hashed with bcrypt
+  name      String
+  phone     String?
+  avatar    String?  // Profile picture URL
+  
+  // Settings
+  preferences Json?   // JSON for user preferences (notifications, language, etc.)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lastLoginAt DateTime?
+
+  // Relations
+  elders        Elder[]
+  notifications Notification[]
+  sessions      Session[]
+  
+  @@map("family_users")
+  @@index([email])
+}
+
+model Caregiver {
+  id                String   @id @default(cuid())
+  name              String
+  phone             String   @unique
+  email             String?  @unique
+  password          String   // Hashed with bcrypt
+  verified          Boolean  @default(false)
+  isActive          Boolean  @default(true)  // Can be deactivated by family
+  rating            Float?   @default(0)     // Average rating 0-5
+  
+  // Personal Information
+  idCard            String   @unique
+  dateOfBirth       DateTime?
+  gender            String?  // male, female, other
+  address           String   @db.Text
+  subDistrict       String?  // ตำบล
+  district          String?  // อำเภอ
+  province          String?  // จังหวัด
+  postalCode        String?
+  
+  // Emergency Contact
+  emergencyContact  String
+  emergencyName     String
+  emergencyRelation String?  // Relationship to caregiver
+  
+  // Professional Information
+  experience        String   // Years of experience
+  certificate       String   @db.Text  // Certificate details
+  specializations   String[] // e.g., ["elderly care", "dementia care"]
+  languages         String[] @default(["Thai"])
+  
+  // Employment
+  salary            Decimal  @db.Decimal(10, 2)
+  salaryType        String   @default("monthly") // monthly, daily, hourly
+  workSchedule      String   @db.Text
+  employmentType    String   @default("full-time") // full-time, part-time, contract
+  
+  // Documents (URLs to cloud storage)
+  idCardImage       String?
+  certificateImage  String?
+  photoUrl          String?  // Profile photo
+  
+  // Pairing System
+  pairingCode       String   @unique  // 6-digit code
+  elderId           String?  @unique  // One caregiver per elder currently
+  elder             Elder?   @relation(fields: [elderId], references: [id])
+  
+  // Contract Information
+  contractStartDate DateTime?
+  contractEndDate   DateTime?
+  startDate         DateTime @default(now())
+  
+  // Status Tracking
+  lastActiveAt      DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  tasks             Task[]
+  healthRecords     HealthRecord[]
+  moods             Mood[]
+  reports           DailyReport[]
+  reviews           CaregiverReview[]
+  payrolls          Payroll[]
+  leaveRequests     LeaveRequest[]
+  
+  @@map("caregivers")
+  @@index([phone])
+  @@index([pairingCode])
+  @@index([elderId])
+}
+
+// ============================================
+// 👴 ELDER MANAGEMENT MODELS
+// ============================================
+
+model Elder {
+  id            String   @id @default(cuid())
+  name          String
+  age           Int
+  dateOfBirth   DateTime?
+  gender        String?  // male, female
+  relation      String   // ยาย, ตา, ปู่, ย่า, etc.
+  profileColor  String   @default("#9333ea")
+  photoUrl      String?
+  
+  // Health Information
+  bloodType     String?
+  allergies     String[] @default([])
+  chronicDiseases String[] @default([])
+  currentMedications String[] @default([])
+  
+  // Contact & Address
+  phone         String?
+  address       String?  @db.Text
+  
+  // Medical History Summary
+  medicalNotes  String?  @db.Text
+  
+  // Emergency Contact (besides family)
+  emergencyContact String?
+  emergencyPhone   String?
+  
+  // Insurance Information
+  insuranceProvider String?
+  insuranceNumber   String?
+  
+  // Family User (Owner)
+  familyUserId  String
+  familyUser    FamilyUser @relation(fields: [familyUserId], references: [id], onDelete: Cascade)
+  
+  // Status
+  isActive      Boolean  @default(true)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  caregiver     Caregiver?
+  bills         Bill[]
+  activities    Activity[]
+  appointments  Appointment[]
+  healthRecords HealthRecord[]
+  moods         Mood[]
+  reports       DailyReport[]
+  medications   Medication[]
+  vitalSigns    VitalSign[]
+  
+  @@map("elders")
+  @@index([familyUserId])
+}
+
+// ============================================
+// 💰 FINANCIAL MANAGEMENT MODELS
+// ============================================
+
+model Bill {
+  id          String   @id @default(cuid())
+  date        DateTime @default(now())
+  description String
+  amount      Decimal  @db.Decimal(10, 2)
+  isPaid      Boolean  @default(false)
+  paidAt      DateTime?
+  category    String   // medical, food, caregiver, supplies, transport, other
+  subcategory String?  // More specific categorization
+  
+  // Who added this bill
+  addedBy     String   // "caregiver" or "family"
+  addedByName String?
+  addedById   String?  // ID of person who added
+  
+  // Receipt/Proof
+  receiptUrl  String?  // Receipt image URL
+  notes       String?  @db.Text
+  
+  // Budget tracking
+  budgetCategory String? // Which budget category this belongs to
+  
+  elderId     String
+  elder       Elder    @relation(fields: [elderId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("bills")
+  @@index([elderId])
+  @@index([category])
+  @@index([isPaid])
+  @@index([date])
+}
+
+model Payroll {
+  id            String   @id @default(cuid())
+  caregiverId   String
+  caregiver     Caregiver @relation(fields: [caregiverId], references: [id], onDelete: Cascade)
+  
+  month         Int      // 1-12
+  year          Int
+  
+  // Salary Breakdown
+  baseSalary    Decimal  @db.Decimal(10, 2)
+  bonus         Decimal  @db.Decimal(10, 2) @default(0)
+  deductions    Decimal  @db.Decimal(10, 2) @default(0)
+  netSalary     Decimal  @db.Decimal(10, 2)
+  
+  // Payment
+  isPaid        Boolean  @default(false)
+  paidAt        DateTime?
+  paymentMethod String?  // bank_transfer, cash, check
+  
+  // Working days
+  workingDays   Int
+  absentDays    Int      @default(0)
+  overtimeHours Float    @default(0)
+  
+  notes         String?  @db.Text
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("payrolls")
+  @@unique([caregiverId, month, year])
+  @@index([caregiverId])
+}
+
+// ============================================
+// 📅 ACTIVITY & TASK MANAGEMENT MODELS
+// ============================================
+
+model Activity {
+  id          String   @id @default(cuid())
+  title       String
+  description String   @db.Text
+  time        String
+  date        DateTime
+  completed   Boolean  @default(false)
+  completedAt DateTime?
+  
+  // Recurrence
+  isRecurring Boolean  @default(false)
+  recurrence  String?  // daily, weekly, monthly
+  
+  // Priority
+  priority    String   @default("normal") // low, normal, high
+  
+  // Category
+  category    String?  // exercise, medication, meal, appointment
+  
+  elderId     String
+  elder       Elder    @relation(fields: [elderId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("activities")
+  @@index([elderId])
+  @@index([date])
+}
+
+model Task {
+  id          String   @id @default(cuid())
+  time        String
+  title       String
+  detail      String   @db.Text
+  instruction String   @db.Text
+  status      String   @default("pending") // done, pending, skipped
+  
+  // Task metadata
+  priority    String   @default("normal") // low, normal, high, urgent
+  category    String?  // meal, medication, exercise, hygiene, other
+  
+  // Completion info
+  completedAt DateTime?
+  photoUrl    String?  // Photo proof of completion
+  notes       String?  @db.Text // Completion notes
+  
+  // Scheduling
+  date        DateTime @default(now())
+  isRecurring Boolean  @default(false)
+  recurrence  String?  // daily, weekly
+  
+  caregiverId String
+  caregiver   Caregiver @relation(fields: [caregiverId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("tasks")
+  @@index([caregiverId])
+  @@index([date])
+  @@index([status])
+}
+
+// ============================================
+// 📆 APPOINTMENT & SCHEDULING MODELS
+// ============================================
+
+model Appointment {
+  id          String   @id @default(cuid())
+  title       String
+  date        DateTime
+  time        String
+  duration    Int?     // Duration in minutes
+  
+  type        String   // doctor, checkup, therapy, vaccination, other
+  location    String
+  address     String?  @db.Text
+  doctorName  String?
+  specialty   String?  // หมอประจำ specialty อะไร
+  
+  // Details
+  notes       String?  @db.Text
+  preparation String?  @db.Text // Things to prepare before appointment
+  
+  // Reminder
+  reminder    Boolean  @default(true)
+  reminderTime Int?    // Hours before to remind (24, 2, 1)
+  
+  // Status
+  status      String   @default("scheduled") // scheduled, completed, cancelled, rescheduled
+  completedAt DateTime?
+  cancelledAt DateTime?
+  cancelReason String?
+  
+  // Follow-up
+  isFollowUp  Boolean  @default(false)
+  previousAppointmentId String?
+  
+  elderId     String
+  elder       Elder    @relation(fields: [elderId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("appointments")
+  @@index([elderId])
+  @@index([date])
+  @@index([type])
+  @@index([status])
+}
+
+// ============================================
+// 🏥 HEALTH & MEDICAL MODELS
+// ============================================
+
+model HealthRecord {
+  id          String   @id @default(cuid())
+  type        String   // vital-sign, observation, incident, checkup
+  
+  // For vital signs (blood pressure, etc.)
+  systolic    Int?
+  diastolic   Int?
+  heartRate   Int?
+  temperature Float?
+  oxygenLevel Float?   // SpO2
+  bloodSugar  Float?
+  weight      Float?
+  
+  // For observations
+  observation String?  @db.Text
+  symptoms    String[] @default([])
+  
+  // General
+  notes       String?  @db.Text
+  severity    String?  // normal, concern, urgent
+  
+  // Attachments
+  photoUrls   String[] @default([])
+  
+  recordedAt  DateTime @default(now())
+  
+  elderId     String
+  elder       Elder    @relation(fields: [elderId], references: [id], onDelete: Cascade)
+  
+  caregiverId String?
+  caregiver   Caregiver? @relation(fields: [caregiverId], references: [id])
+  
+  createdAt   DateTime @default(now())
+  
+  @@map("health_records")
+  @@index([elderId])
+  @@index([type])
+  @@index([recordedAt])
+}
+
+model VitalSign {
+  id          String   @id @default(cuid())
+  
+  systolic    Int?
+  diastolic   Int?
+  heartRate   Int?
+  temperature Float?
+  oxygenLevel Float?
+  bloodSugar  Float?
+  weight      Float?
+  height      Float?
+  
+  notes       String?  @db.Text
+  measuredAt  DateTime @default(now())
+  
+  elderId     String
+  elder       Elder    @relation(fields: [elderId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  
+  @@map("vital_signs")
+  @@index([elderId])
+  @@index([measuredAt])
+}
+
+model Medication {
+  id            String   @id @default(cuid())
+  name          String
+  dosage        String   // "500mg", "2 tablets"
+  frequency     String   // "3 times daily", "every 8 hours"
+  timing        String[] // ["morning", "afternoon", "evening"]
+  
+  // Instructions
+  instructions  String?  @db.Text
+  sideEffects   String?  @db.Text
+  
+  // Schedule
+  startDate     DateTime
+  endDate       DateTime?
+  
+  // Status
+  isActive      Boolean  @default(true)
+  
+  // Doctor prescribed
+  prescribedBy  String?
+  prescription  String?  // Prescription document URL
+  
+  elderId       String
+  elder         Elder    @relation(fields: [elderId], references: [id], onDelete: Cascade)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("medications")
+  @@index([elderId])
+  @@index([isActive])
+}
+
+model Mood {
+  id          String   @id @default(cuid())
+  
+  // Mood tracking
+  mood        String   // happy, sad, neutral, angry, anxious
+  moodLevel   Int?     @default(5) // 1-10 scale
+  
+  timeOfDay   String   // morning, afternoon, evening, night
+  
+  // Behavior observations
+  activities  String[] @default([]) // eating, sleeping, social
+  behaviors   String[] @default([]) // active, quiet, talkative
+  
+  // Additional notes
+  note        String?  @db.Text
+  triggers    String[] @default([]) // What caused the mood
+  
+  // Photo/Video evidence
+  photoUrl    String?
+  
+  recordedAt  DateTime @default(now())
+  
+  elderId     String
+  elder       Elder    @relation(fields: [elderId], references: [id], onDelete: Cascade)
+  
+  caregiverId String
+  caregiver   Caregiver @relation(fields: [caregiverId], references: [id])
+  
+  createdAt   DateTime @default(now())
+  
+  @@map("moods")
+  @@index([elderId])
+  @@index([caregiverId])
+  @@index([recordedAt])
+}
+
+// ============================================
+// 📝 REPORTING & COMMUNICATION MODELS
+// ============================================
+
+model DailyReport {
+  id          String   @id @default(cuid())
+  date        DateTime @default(now())
+  
+  // Summary
+  title       String
+  summary     String   @db.Text
+  
+  // Task completion
+  tasksCompleted Int  @default(0)
+  tasksTotal     Int  @default(0)
+  
+  // Health summary
+  healthStatus   String @default("normal") // normal, concern, urgent
+  healthNotes    String? @db.Text
+  
+  // Mood summary
+  overallMood    String? // happy, neutral, sad
+  
+  // Expenses
+  expenseTotal   Decimal @db.Decimal(10, 2) @default(0)
+  
+  // Incidents
+  incidents      String[] @default([])
+  
+  // Highlights
+  highlights     String[] @default([])
+  concerns       String[] @default([])
+  
+  // Media
+  photoUrls      String[] @default([])
+  
+  // Status
+  status         String   @default("draft") // draft, sent, read
+  sentAt         DateTime?
+  readAt         DateTime?
+  
+  elderId        String
+  elder          Elder    @relation(fields: [elderId], references: [id], onDelete: Cascade)
+  
+  caregiverId    String
+  caregiver      Caregiver @relation(fields: [caregiverId], references: [id])
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  @@map("daily_reports")
+  @@index([elderId])
+  @@index([caregiverId])
+  @@index([date])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  title     String
+  message   String   @db.Text
+  type      String   @default("info") // info, warning, success, error, urgent
+  
+  // Categorization
+  category  String?  // appointment, health, task, bill, report
+  
+  // Related data
+  relatedId String?  // ID of related entity (appointment, bill, etc.)
+  relatedType String? // Type of related entity
+  
+  // Action
+  actionUrl String?  // Deep link to specific page
+  actionText String? // "View Appointment", "Review Bill"
+  
+  // Status
+  isRead    Boolean  @default(false)
+  readAt    DateTime?
+  
+  // Priority
+  priority  String   @default("normal") // low, normal, high, urgent
+  
+  // Target user
+  userId    String   // FamilyUser ID
+  user      FamilyUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Schedule (for future notifications)
+  scheduledFor DateTime?
+  
+  createdAt DateTime @default(now())
+  expiresAt DateTime? // Auto-delete after this date
+  
+  @@map("notifications")
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+// ============================================
+// ⭐ REVIEW & RATING MODELS
+// ============================================
+
+model CaregiverReview {
+  id          String   @id @default(cuid())
+  
+  rating      Float    // 1-5 stars
+  
+  // Rating breakdown
+  professionalismRating Float?
+  punctualityRating     Float?
+  careQualityRating     Float?
+  communicationRating   Float?
+  
+  // Review content
+  title       String?
+  comment     String?  @db.Text
+  
+  // Recommendations
+  wouldRecommend Boolean @default(true)
+  
+  // Review period
+  reviewMonth Int
+  reviewYear  Int
+  
+  caregiverId String
+  caregiver   Caregiver @relation(fields: [caregiverId], references: [id], onDelete: Cascade)
+  
+  reviewerId  String   // FamilyUser ID
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("caregiver_reviews")
+  @@index([caregiverId])
+  @@unique([caregiverId, reviewMonth, reviewYear, reviewerId])
+}
+
+// ============================================
+// 🏖️ LEAVE & ATTENDANCE MODELS
+// ============================================
+
+model LeaveRequest {
+  id          String   @id @default(cuid())
+  
+  type        String   // sick, personal, annual, emergency
+  startDate   DateTime
+  endDate     DateTime
+  days        Int
+  
+  reason      String   @db.Text
+  status      String   @default("pending") // pending, approved, rejected
+  
+  approvedBy  String?  // FamilyUser ID who approved
+  approvedAt  DateTime?
+  rejectedAt  DateTime?
+  rejectReason String? @db.Text
+  
+  caregiverId String
+  caregiver   Caregiver @relation(fields: [caregiverId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("leave_requests")
+  @@index([caregiverId])
+  @@index([status])
+}
+
+// ============================================
+// 🔒 SESSION & SECURITY MODELS
+// ============================================
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  
+  userId    String
+  user      FamilyUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  userAgent String?
+  ipAddress String?
+  
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  
+  @@map("sessions")
+  @@index([token])
+  @@index([userId])
+}
