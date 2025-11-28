@@ -1,31 +1,50 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../../lib/prisma';
+import { authenticateToken, requireFamily } from '../../middleware/auth';
 
 const router = Router();
 
-// GET /api/family/elders - ดึงรายชื่อผู้สูงอายุ
-router.get('/', async (req: Request, res: Response) => {
+// GET /api/family/elders - ดึงรายชื่อผู้สูงอายุ (with pagination)
+router.get('/', authenticateToken, requireFamily, async (req: Request, res: Response) => {
   try {
-    const { familyUserId } = req.query;
-
-    const elders = await prisma.elder.findMany({
-      where: familyUserId ? { familyUserId: String(familyUserId) } : undefined,
-      include: {
-        caregiver: {
-          select: {
-            id: true,
-            name: true,
-            phone: true,
-            verified: true
+    const familyUserId = req.userId as string;
+    if (!familyUserId) {
+      return res.status(401).json({ error: 'Missing family user id from token' });
+    }
+    // Pagination
+    const page = parseInt(req.query.page as string) || 1;
+    const pageSize = parseInt(req.query.pageSize as string) || 5;
+    const skip = (page - 1) * pageSize;
+    const take = pageSize;
+    // Query elders
+    const [elders, total] = await Promise.all([
+      prisma.elder.findMany({
+        where: { familyUserId },
+        include: {
+          caregiver: {
+            select: {
+              id: true,
+              name: true,
+              phone: true,
+              verified: true
+            }
           }
-        }
-      },
-      orderBy: {
-        createdAt: 'desc'
-      }
+        },
+        orderBy: {
+          createdAt: 'desc'
+        },
+        skip,
+        take
+      }),
+      prisma.elder.count({ where: { familyUserId } })
+    ]);
+    res.json({
+      elders,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize)
     });
-
-    res.json(elders);
   } catch (error: any) {
     console.error('Get elders error:', error);
     res.status(500).json({ error: 'Failed to fetch elders', message: error.message });
@@ -33,7 +52,7 @@ router.get('/', async (req: Request, res: Response) => {
 });
 
 // POST /api/family/elders - เพิ่มผู้สูงอายุใหม่
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', authenticateToken, requireFamily, async (req: Request, res: Response) => {
   try {
     const {
       name,
@@ -46,10 +65,22 @@ router.post('/', async (req: Request, res: Response) => {
       allergies,
       chronicDiseases,
       phone,
-      address,
-      familyUserId
+      address
     } = req.body;
-
+    const familyUserId = req.userId as string;
+    if (!familyUserId) {
+      return res.status(401).json({ error: 'Missing family user id from token' });
+    }
+    // Check for duplicate elder name for this user
+    const existing = await prisma.elder.findFirst({
+      where: {
+        familyUserId,
+        name: name.trim()
+      }
+    });
+    if (existing) {
+      return res.status(400).json({ error: 'Duplicate elder name', message: 'มีผู้สูงอายุชื่อนี้อยู่แล้ว กรุณาใช้ชื่ออื่น' });
+    }
     const elder = await prisma.elder.create({
       data: {
         name,
@@ -63,10 +94,9 @@ router.post('/', async (req: Request, res: Response) => {
         chronicDiseases: chronicDiseases || [],
         phone,
         address,
-        familyUserId
+        familyUserId: familyUserId
       }
     });
-
     res.status(201).json(elder);
   } catch (error: any) {
     console.error('Create elder error:', error);
@@ -114,9 +144,13 @@ router.get('/:id', async (req: Request, res: Response) => {
 });
 
 // PATCH /api/family/elders/:id - แก้ไขข้อมูล
-router.patch('/:id', async (req: Request, res: Response) => {
+router.patch('/:id', authenticateToken, requireFamily, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const familyUserId = req.userId as string;
+    if (!familyUserId) {
+      return res.status(401).json({ error: 'Missing family user id from token' });
+    }
     const updateData = { ...req.body };
 
     // Convert age to number if provided
@@ -132,12 +166,32 @@ router.patch('/:id', async (req: Request, res: Response) => {
     // Remove familyUserId from update (shouldn't be changed)
     delete updateData.familyUserId;
 
-    const elder = await prisma.elder.update({
+    // ตรวจสอบสิทธิ์: ต้องเป็นเจ้าของ elder
+    const elder = await prisma.elder.findUnique({ where: { id } });
+    if (!elder || elder.familyUserId !== familyUserId) {
+      return res.status(403).json({ error: 'Permission denied', message: 'คุณไม่มีสิทธิ์แก้ไขข้อมูลนี้' });
+    }
+
+    // ตรวจสอบชื่อซ้ำ (exclude ตัวเอง)
+    if (updateData.name) {
+      const duplicate = await prisma.elder.findFirst({
+        where: {
+          familyUserId,
+          name: updateData.name.trim(),
+          NOT: { id }
+        }
+      });
+      if (duplicate) {
+        return res.status(400).json({ error: 'Duplicate elder name', message: 'มีผู้สูงอายุชื่อนี้อยู่แล้ว กรุณาใช้ชื่ออื่น' });
+      }
+    }
+
+    const updated = await prisma.elder.update({
       where: { id },
       data: updateData
     });
 
-    res.json(elder);
+    res.json(updated);
   } catch (error: any) {
     console.error('Update elder error:', error);
     res.status(500).json({ error: 'Failed to update elder', message: error.message });

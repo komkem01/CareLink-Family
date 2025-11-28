@@ -1,18 +1,24 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../../lib/prisma';
+import { authenticateToken, requireFamily } from '../../middleware/auth';
 
 const router = Router();
 
 // GET /api/family/reports - ดึงรายงานทั้งหมด
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', authenticateToken, requireFamily, async (req: Request, res: Response) => {
   try {
+    const userId = req.userId as string;
     const { elderId, caregiverId, status } = req.query;
-
     const where: any = {};
+    // Filter by elderId, caregiverId, status if provided
     if (elderId) where.elderId = String(elderId);
     if (caregiverId) where.caregiverId = String(caregiverId);
     if (status) where.status = String(status);
-
+    // Always filter by user's elders (familyUserId)
+    // If elderId not provided, filter by user's elders
+    if (!elderId) {
+      where.elder = { familyUserId: userId };
+    }
     const reports = await prisma.dailyReport.findMany({
       where,
       orderBy: {
@@ -33,7 +39,6 @@ router.get('/', async (req: Request, res: Response) => {
         }
       }
     });
-
     res.json(reports);
   } catch (error: any) {
     console.error('Get reports error:', error);

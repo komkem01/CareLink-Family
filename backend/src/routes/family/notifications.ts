@@ -1,20 +1,22 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../../lib/prisma';
+import { authenticateToken, requireFamily } from '../../middleware/auth';
 
 const router = Router();
 
 // GET /api/family/notifications
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', authenticateToken, requireFamily, async (req: Request, res: Response) => {
   try {
-    const { userId } = req.query;
-
+    const userId = req.userId as string;
+    if (!userId) {
+      return res.status(401).json({ error: 'Missing user id from token' });
+    }
     const notifications = await prisma.notification.findMany({
-      where: userId ? { userId: String(userId) } : undefined,
+      where: { userId },
       orderBy: {
         createdAt: 'desc'
       }
     });
-
     res.json(notifications);
   } catch (error: any) {
     console.error('Get notifications error:', error);

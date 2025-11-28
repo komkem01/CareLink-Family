@@ -15,7 +15,7 @@ datasource db {
 // ============================================
 
 model FamilyUser {
-  id        String   @id @default(cuid())
+  id        String   @id @default(uuid())
   email     String   @unique
   password  String   // Hashed with bcrypt
   name      String
@@ -39,7 +39,7 @@ model FamilyUser {
 }
 
 model Caregiver {
-  id                String   @id @default(cuid())
+  id                String   @id @default(uuid())
   name              String
   phone             String   @unique
   email             String?  @unique
@@ -115,7 +115,7 @@ model Caregiver {
 // ============================================
 
 model Elder {
-  id            String   @id @default(cuid())
+  id            String   @id @default(uuid())
   name          String
   age           Int
   dateOfBirth   DateTime?
@@ -175,7 +175,7 @@ model Elder {
 // ============================================
 
 model Bill {
-  id          String   @id @default(cuid())
+  id          String   @id @default(uuid())
   date        DateTime @default(now())
   description String
   amount      Decimal  @db.Decimal(10, 2)
@@ -210,7 +210,7 @@ model Bill {
 }
 
 model Payroll {
-  id            String   @id @default(cuid())
+  id            String   @id @default(uuid())
   caregiverId   String
   caregiver     Caregiver @relation(fields: [caregiverId], references: [id], onDelete: Cascade)
   
@@ -248,7 +248,7 @@ model Payroll {
 // ============================================
 
 model Activity {
-  id          String   @id @default(cuid())
+  id          String   @id @default(uuid())
   title       String
   description String   @db.Text
   time        String
@@ -278,7 +278,7 @@ model Activity {
 }
 
 model Task {
-  id          String   @id @default(cuid())
+  id          String   @id @default(uuid())
   time        String
   title       String
   detail      String   @db.Text
@@ -316,7 +316,7 @@ model Task {
 // ============================================
 
 model Appointment {
-  id          String   @id @default(cuid())
+  id          String   @id @default(uuid())
   title       String
   date        DateTime
   time        String
@@ -364,7 +364,7 @@ model Appointment {
 // ============================================
 
 model HealthRecord {
-  id          String   @id @default(cuid())
+  id          String   @id @default(uuid())
   type        String   // vital-sign, observation, incident, checkup
   
   // For vital signs (blood pressure, etc.)
@@ -404,7 +404,7 @@ model HealthRecord {
 }
 
 model VitalSign {
-  id          String   @id @default(cuid())
+  id          String   @id @default(uuid())
   
   systolic    Int?
   diastolic   Int?
@@ -429,7 +429,7 @@ model VitalSign {
 }
 
 model Medication {
-  id            String   @id @default(cuid())
+  id            String   @id @default(uuid())
   name          String
   dosage        String   // "500mg", "2 tablets"
   frequency     String   // "3 times daily", "every 8 hours"
@@ -462,7 +462,7 @@ model Medication {
 }
 
 model Mood {
-  id          String   @id @default(cuid())
+  id          String   @id @default(uuid())
   
   // Mood tracking
   mood        String   // happy, sad, neutral, angry, anxious
@@ -502,7 +502,7 @@ model Mood {
 // ============================================
 
 model DailyReport {
-  id          String   @id @default(cuid())
+  id          String   @id @default(uuid())
   date        DateTime @default(now())
   
   // Summary
@@ -554,7 +554,7 @@ model DailyReport {
 }
 
 model Notification {
-  id        String   @id @default(cuid())
+  id        String   @id @default(uuid())
   title     String
   message   String   @db.Text
   type      String   @default("info") // info, warning, success, error, urgent
@@ -598,7 +598,7 @@ model Notification {
 // ============================================
 
 model CaregiverReview {
-  id          String   @id @default(cuid())
+  id          String   @id @default(uuid())
   
   rating      Float    // 1-5 stars
   
@@ -637,7 +637,7 @@ model CaregiverReview {
 // ============================================
 
 model LeaveRequest {
-  id          String   @id @default(cuid())
+  id          String   @id @default(uuid())
   
   type        String   // sick, personal, annual, emergency
   startDate   DateTime
@@ -668,7 +668,7 @@ model LeaveRequest {
 // ============================================
 
 model Session {
-  id        String   @id @default(cuid())
+  id        String   @id @default(uuid())
   token     String   @unique
   
   userId    String

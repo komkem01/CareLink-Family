@@ -32,6 +32,21 @@ router.post('/family/register', async (req: Request, res: Response) => {
     // Generate token
     const token = generateToken(user.id, 'family');
 
+    // Extract request details for session tracking
+    const userAgent = req.get('User-Agent') || 'Unknown';
+    const ipAddress = req.ip || req.socket.remoteAddress || 'Unknown';
+
+    // Create session record for new registration
+    await prisma.session.create({
+      data: {
+        userId: user.id,
+        token,
+        userAgent,
+        ipAddress,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours from now
+      },
+    });
+
     res.status(201).json({
       message: 'User created successfully',
       token,
@@ -66,6 +81,21 @@ router.post('/family/login', async (req: Request, res: Response) => {
 
     // Generate token
     const token = generateToken(user.id, 'family');
+
+    // Extract request details for session tracking
+    const userAgent = req.get('User-Agent') || 'Unknown';
+    const ipAddress = req.ip || req.socket.remoteAddress || 'Unknown';
+
+    // Create session record with detailed information
+    await prisma.session.create({
+      data: {
+        userId: user.id,
+        token,
+        userAgent,
+        ipAddress,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours from now
+      },
+    });
 
     res.json({
       message: 'Login successful',

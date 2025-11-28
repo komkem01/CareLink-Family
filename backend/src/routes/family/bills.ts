@@ -1,17 +1,22 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../../lib/prisma';
+import { authenticateToken, requireFamily } from '../../middleware/auth';
 
 const router = Router();
 
 // GET /api/family/bills
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', authenticateToken, requireFamily, async (req: Request, res: Response) => {
   try {
+    const userId = req.userId as string;
     const { elderId, isPaid } = req.query;
-
     const where: any = {};
-    if (elderId) where.elderId = String(elderId);
+    if (elderId) {
+      where.elderId = String(elderId);
+    } else {
+      // If no elderId, filter by user's elders
+      where.elder = { familyUserId: userId };
+    }
     if (isPaid !== undefined) where.isPaid = isPaid === 'true';
-
     const bills = await prisma.bill.findMany({
       where,
       include: {
@@ -26,7 +31,6 @@ router.get('/', async (req: Request, res: Response) => {
         date: 'desc'
       }
     });
-
     res.json(bills);
   } catch (error: any) {
     console.error('Get bills error:', error);

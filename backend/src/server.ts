@@ -29,11 +29,40 @@ import profileRoutes from './routes/shared/profile';
 dotenv.config();
 
 const app: Express = express();
+// Log frontend requests: method, path, origin (with color)
+const methodColors: Record<string, string> = {
+  GET: '\x1b[32m',      // green
+  POST: '\x1b[33m',     // yellow
+  PATCH: '\x1b[35m',    // magenta
+  DELETE: '\x1b[31m',   // red
+};
+app.use((req: Request, res: Response, next) => {
+  const origin = req.headers.origin || req.headers.referer || "unknown";
+  if (allowedOrigins.includes(origin)) {
+    const color = methodColors[req.method] || '';
+    const reset = '\x1b[0m';
+    console.log(`${color}🌐 [FRONTEND] ${req.method} ${req.originalUrl} | Origin: ${origin}${reset}`);
+  }
+  next();
+});
 const PORT = process.env.PORT || 8000;
 
 // Middleware
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:8080',
+  process.env.FRONTEND_URL
+].filter(Boolean);
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: function (origin, callback) {
+    // allow requests with no origin (like mobile apps, curl, etc)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      return callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 app.use(express.json());
@@ -90,6 +119,7 @@ app.use((err: Error, req: Request, res: Response) => {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📂 API Base URL: http://localhost:${PORT}/api`);
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
 });

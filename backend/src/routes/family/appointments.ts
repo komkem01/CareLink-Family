@@ -1,24 +1,28 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../../lib/prisma';
+import { authenticateToken, requireFamily } from '../../middleware/auth';
 
 const router = Router();
 
 // GET /api/appointments - Get all appointments (with filters)
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', authenticateToken, requireFamily, async (req: Request, res: Response) => {
   try {
+    const userId = req.userId as string;
     const { elderId, filter, startDate } = req.query;
-
     const where: any = {};
-    if (elderId) where.elderId = String(elderId);
+    if (elderId) {
+      where.elderId = String(elderId);
+    } else {
+      // If no elderId, filter by user's elders
+      where.elder = { familyUserId: userId };
+    }
     if (startDate) where.date = { gte: new Date(String(startDate)) };
-
     // Filter: upcoming or past
     if (filter === 'upcoming') {
       where.date = { gte: new Date() };
     } else if (filter === 'past') {
       where.date = { lt: new Date() };
     }
-
     const appointments = await prisma.appointment.findMany({
       where,
       include: {
@@ -33,7 +37,6 @@ router.get('/', async (req: Request, res: Response) => {
         date: 'asc',
       },
     });
-
     res.json(appointments);
   } catch (error: any) {
     console.error('Get appointments error:', error);

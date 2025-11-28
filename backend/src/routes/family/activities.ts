@@ -1,15 +1,23 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../../lib/prisma';
+import { authenticateToken, requireFamily } from '../../middleware/auth';
 
 const router = Router();
 
 // GET /api/family/activities
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', authenticateToken, requireFamily, async (req: Request, res: Response) => {
   try {
+    const userId = req.userId as string;
     const { elderId } = req.query;
-
+    const where: any = {};
+    if (elderId) {
+      where.elderId = String(elderId);
+    } else {
+      // If no elderId, filter by user's elders
+      where.elder = { familyUserId: userId };
+    }
     const activities = await prisma.activity.findMany({
-      where: elderId ? { elderId: String(elderId) } : undefined,
+      where,
       orderBy: {
         date: 'desc'
       },
@@ -22,7 +30,6 @@ router.get('/', async (req: Request, res: Response) => {
         }
       }
     });
-
     res.json(activities);
   } catch (error: any) {
     console.error('Get activities error:', error);

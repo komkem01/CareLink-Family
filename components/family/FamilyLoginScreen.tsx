@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import Cookies from "js-cookie";
 import { Heart, Mail, Key, LogIn, UserPlus } from "lucide-react";
 import CustomAlert from "../CustomAlert";
 
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export default function FamilyLoginScreen({ onLoginSuccess }: Props) {
+  const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "";
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -25,18 +27,54 @@ export default function FamilyLoginScreen({ onLoginSuccess }: Props) {
     message: "",
     type: "info",
   });
+  // Persist login state using cookie
+  useEffect(() => {
+    const token = Cookies.get("token");
+    if (token) {
+      // Assume valid token, auto-login
+      onLoginSuccess();
+    }
+  }, []);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (isLogin) {
       // เข้าสู่ระบบ
       if (email && password) {
-        setAlert({
-          isOpen: true,
-          title: "เข้าสู่ระบบสำเร็จ",
-          message: "ยินดีต้อนรับกลับมา",
-          type: "success",
-        });
-        setTimeout(() => onLoginSuccess(), 1000);
+        try {
+          const res = await fetch(`${BASE_URL}/auth/family/login`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ email, password }),
+          });
+          const data = await res.json();
+          if (res.ok && data.token) {
+            // Store token in cookie (default: session, or set expires if backend provides exp)
+            Cookies.set("token", data.token, { expires: 7 });
+            setAlert({
+              isOpen: true,
+              title: "เข้าสู่ระบบสำเร็จ",
+              message: "ยินดีต้อนรับกลับมา",
+              type: "success",
+            });
+            setTimeout(() => onLoginSuccess(), 1000);
+          } else {
+            setAlert({
+              isOpen: true,
+              title: "เข้าสู่ระบบล้มเหลว",
+              message: data.message || "อีเมลหรือรหัสผ่านไม่ถูกต้อง",
+              type: "error",
+            });
+          }
+        } catch (err) {
+          setAlert({
+            isOpen: true,
+            title: "ข้อผิดพลาด",
+            message: "เกิดข้อผิดพลาดในการเข้าสู่ระบบ",
+            type: "error",
+          });
+        }
       } else {
         setAlert({
           isOpen: true,
@@ -48,17 +86,43 @@ export default function FamilyLoginScreen({ onLoginSuccess }: Props) {
     } else {
       // ลงทะเบียน
       if (email && password && name && phone) {
-        setAlert({
-          isOpen: true,
-          title: "ลงทะเบียนสำเร็จ",
-          message: "สร้างบัญชีเรียบร้อยแล้ว กรุณาเข้าสู่ระบบ",
-          type: "success",
-        });
-        setTimeout(() => {
-          setIsLogin(true);
-          setName("");
-          setPhone("");
-        }, 1500);
+        try {
+          const res = await fetch(`${BASE_URL}/auth/family/register`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ email, password, name, phone }),
+          });
+          const data = await res.json();
+          if (res.ok) {
+            setAlert({
+              isOpen: true,
+              title: "ลงทะเบียนสำเร็จ",
+              message: "สร้างบัญชีเรียบร้อยแล้ว กรุณาเข้าสู่ระบบ",
+              type: "success",
+            });
+            setTimeout(() => {
+              setIsLogin(true);
+              setName("");
+              setPhone("");
+            }, 1500);
+          } else {
+            setAlert({
+              isOpen: true,
+              title: "ลงทะเบียนล้มเหลว",
+              message: data.message || "เกิดข้อผิดพลาดในการลงทะเบียน",
+              type: "error",
+            });
+          }
+        } catch (err) {
+          setAlert({
+            isOpen: true,
+            title: "ข้อผิดพลาด",
+            message: "เกิดข้อผิดพลาดในการลงทะเบียน",
+            type: "error",
+          });
+        }
       } else {
         setAlert({
           isOpen: true,

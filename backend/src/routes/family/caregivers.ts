@@ -1,20 +1,23 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../../lib/prisma';
 import bcrypt from 'bcryptjs';
+import { authenticateToken, requireFamily } from '../../middleware/auth';
 
 const router = Router();
 
 // GET /api/family/caregivers - ดึงรายชื่อผู้ดูแลทั้งหมด
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', authenticateToken, requireFamily, async (req: Request, res: Response) => {
   try {
-    const { familyUserId } = req.query;
-
+    const familyUserId = req.userId as string;
+    if (!familyUserId) {
+      return res.status(401).json({ error: 'Missing family user id from token' });
+    }
     const caregivers = await prisma.caregiver.findMany({
-      where: familyUserId ? {
+      where: {
         elder: {
-          familyUserId: String(familyUserId)
+          familyUserId: familyUserId
         }
-      } : undefined,
+      },
       include: {
         elder: {
           select: {
@@ -24,7 +27,6 @@ router.get('/', async (req: Request, res: Response) => {
         }
       }
     });
-
     res.json(caregivers);
   } catch (error: any) {
     console.error('Get caregivers error:', error);
