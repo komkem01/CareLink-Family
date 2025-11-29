@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../../lib/prisma';
 import { authenticateToken, requireFamily } from '../../middleware/auth';
+import { selectBestCaregiver } from '../../services/taskAssignmentService';
 
 const router = Router();
 
@@ -52,7 +53,91 @@ router.post('/', async (req: Request, res: Response) => {
       }
     });
 
-    res.status(201).json(activity);
+    console.log('✅ Activity created:', activity.id);
+
+    // 🧠 Smart Task Assignment
+    let tasksCreated = 0;
+    const createdTasks = [];
+    const notifications = [];
+    
+    if (caregiverId) {
+      // ถ้าระบุ caregiver ไว้แล้ว ให้สร้าง task ให้เลย
+      console.log('👤 Creating task for specified caregiver:', caregiverId);
+      const task = await prisma.task.create({
+        data: {
+          title,
+          detail: description,
+          instruction: description,
+          time,
+          date: new Date(date),
+          caregiverId,
+          elderId,
+          status: 'pending'
+        }
+      });
+      createdTasks.push(task);
+      tasksCreated = 1;
+      console.log('✅ Task created for caregiver:', caregiverId);
+    } else {
+      // 🎯 ใช้ Smart Assignment เลือก caregiver ที่เหมาะสมที่สุด
+      console.log('🧠 Using smart assignment to select best caregiver...');
+      const bestCaregiverId = await selectBestCaregiver(elderId, new Date(date));
+      
+      if (bestCaregiverId) {
+        console.log(`🎯 Best caregiver selected: ${bestCaregiverId}`);
+        const task = await prisma.task.create({
+          data: {
+            title,
+            detail: description,
+            instruction: description,
+            time,
+            date: new Date(date),
+            caregiverId: bestCaregiverId,
+            elderId,
+            status: 'pending'
+          }
+        });
+        createdTasks.push(task);
+        tasksCreated = 1;
+        console.log('✅ Task created with smart assignment');
+      } else {
+        // ไม่มี caregiver ที่เหมาะสม → ส่ง notification แจ้ง family
+        console.log('⚠️ No suitable caregiver found - sending notification to family');
+        
+        // ดึง family user
+        const elderInfo = await prisma.elder.findUnique({
+          where: { id: elderId },
+          select: { familyUserId: true }
+        });
+        
+        if (elderInfo?.familyUserId) {
+          await prisma.notification.create({
+            data: {
+              userId: elderInfo.familyUserId,
+              type: 'task_assignment_failed',
+              title: '⚠️ ไม่สามารถมอบหมายงานอัตโนมัติได้',
+              message: `กิจกรรม "${title}" วันที่ ${new Date(date).toLocaleDateString('th-TH')} ไม่มีผู้ดูแลที่พร้อมรับงาน กรุณามอบหมายเองในภายหลัง`
+            }
+          });
+          notifications.push({
+            type: 'warning',
+            message: 'No caregiver available on this date. Please assign manually later.'
+          });
+        }
+        
+        console.log('📢 Notification sent to family');
+      }
+    }
+
+    res.status(201).json({
+      activity,
+      tasksCreated,
+      tasks: createdTasks,
+      notifications,
+      message: tasksCreated > 0
+        ? `Activity และ ${tasksCreated} Task ถูกสร้างสำหรับผู้ดูแลเรียบร้อย` 
+        : 'Activity ถูกสร้างแล้ว (ไม่มีผู้ดูแลที่ verified จะมอบหมายงาน)'
+    });
   } catch (error: any) {
     console.error('Create activity error:', error);
     res.status(500).json({ error: 'Failed to create activity', message: error.message });

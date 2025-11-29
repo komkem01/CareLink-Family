@@ -32,8 +32,12 @@ import {
   ArrowLeft,
   Download,
   MapPin,
+  Pill,
 } from "lucide-react";
 import CustomAlert from "../CustomAlert";
+import MedicationsTab from "./MedicationsTab";
+import HealthRiskCard from "./HealthRiskCard";
+import WeeklyReportButton from "./WeeklyReportButton";
 
 interface Elder {
   id: string;
@@ -1782,6 +1786,14 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
               </div>
             </div>
 
+            {/* Health Risk Score Card */}
+            {selectedElder && (
+              <HealthRiskCard 
+                elderId={selectedElder.id} 
+                elderName={selectedElder.name} 
+              />
+            )}
+
             {/* Quick Stats */}
             <div className="bg-gradient-to-br from-orange-500 to-red-500 rounded-3xl p-6 text-white shadow-lg">
               <div className="flex justify-between items-start mb-4">
@@ -1810,12 +1822,20 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                   <FileText size={20} className="text-blue-500" />
                   รายงานล่าสุด
                 </h3>
-                <button
-                  onClick={() => setShowReportsModal(true)}
-                  className="text-blue-600 text-sm font-bold flex items-center gap-1 hover:text-blue-700 active:scale-95 transition-all"
-                >
-                  ดูทั้งหมด <ChevronRight size={16} />
-                </button>
+                <div className="flex items-center gap-2">
+                  {selectedElder && (
+                    <WeeklyReportButton 
+                      elderId={selectedElder.id} 
+                      elderName={selectedElder.name} 
+                    />
+                  )}
+                  <button
+                    onClick={() => setShowReportsModal(true)}
+                    className="text-blue-600 text-sm font-bold flex items-center gap-1 hover:text-blue-700 active:scale-95 transition-all"
+                  >
+                    ดูทั้งหมด <ChevronRight size={16} />
+                  </button>
+                </div>
               </div>
               <div className="space-y-3">
                 {loadingReports ? (
@@ -3394,6 +3414,30 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
             </div>
           </div>
         )}
+
+        {/* MEDICATIONS TAB */}
+        {activeTab === "medications" && selectedElder && (
+          <div className="animate-in fade-in duration-300">
+            <MedicationsTab 
+              elderId={selectedElder.id} 
+              elderName={selectedElder.name} 
+            />
+          </div>
+        )}
+
+        {/* HEALTH TAB */}
+        {activeTab === "health" && selectedElder && (
+          <div className="animate-in fade-in duration-300">
+            <div className="space-y-6">
+              <HealthRiskCard 
+                elderId={selectedElder.id} 
+                elderName={selectedElder.name} 
+              />
+              
+              {/* Health Records Section (existing) can be added here */}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Bottom Navigation */}
@@ -3473,6 +3517,40 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
           <span className="text-xs font-bold">กิจกรรม</span>
         </button>
         <button
+          onClick={() => setActiveTab("medications")}
+          className={`flex flex-col items-center p-2 w-full transition-all active:scale-90 ${
+            activeTab === "medications"
+              ? "text-purple-600"
+              : "text-gray-400 hover:text-gray-600"
+          }`}
+        >
+          <div
+            className={`p-1 rounded-xl mb-1 ${
+              activeTab === "medications" ? "bg-purple-50" : ""
+            }`}
+          >
+            <Pill size={26} strokeWidth={activeTab === "medications" ? 2.5 : 2} />
+          </div>
+          <span className="text-xs font-bold">ยา</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("health")}
+          className={`flex flex-col items-center p-2 w-full transition-all active:scale-90 ${
+            activeTab === "health"
+              ? "text-purple-600"
+              : "text-gray-400 hover:text-gray-600"
+          }`}
+        >
+          <div
+            className={`p-1 rounded-xl mb-1 ${
+              activeTab === "health" ? "bg-purple-50" : ""
+            }`}
+          >
+            <Heart size={26} strokeWidth={activeTab === "health" ? 2.5 : 2} />
+          </div>
+          <span className="text-xs font-bold">สุขภาพ</span>
+        </button>
+        <button
           onClick={() => setActiveTab("calendar")}
           className={`flex flex-col items-center p-2 w-full transition-all active:scale-90 ${
             activeTab === "calendar"
@@ -3491,6 +3569,23 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
             />
           </div>
           <span className="text-xs font-bold">ปฏิทิน</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("moods")}
+          className={`flex flex-col items-center p-2 w-full transition-all active:scale-90 ${
+            activeTab === "moods"
+              ? "text-purple-600"
+              : "text-gray-400 hover:text-gray-600"
+          }`}
+        >
+          <div
+            className={`p-1 rounded-xl mb-1 ${
+              activeTab === "moods" ? "bg-purple-50" : ""
+            }`}
+          >
+            <TrendingUp size={26} strokeWidth={activeTab === "moods" ? 2.5 : 2} />
+          </div>
+          <span className="text-xs font-bold">อารมณ์</span>
         </button>
       </div>
 

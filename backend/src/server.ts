@@ -13,6 +13,8 @@ import familyActivityRoutes from './routes/family/activities';
 import familyAppointmentRoutes from './routes/family/appointments';
 import familyReportRoutes from './routes/family/reports';
 import familyNotificationRoutes from './routes/family/notifications';
+import familyMedicationRoutes from "./routes/family/medications";
+import familyHealthRiskRoutes from "./routes/family/health-risk";
 
 // Caregiver routes
 import caregiverTaskRoutes from './routes/caregiver/tasks';
@@ -21,11 +23,15 @@ import caregiverMoodRoutes from './routes/caregiver/moods';
 import caregiverExpenseRoutes from './routes/caregiver/expenses';
 import caregiverReportRoutes from './routes/caregiver/reports';
 import caregiverAttendanceRoutes from './routes/caregiver/attendance';
+import caregiverMedicationRoutes from "./routes/caregiver/medications";
 
 // Shared routes
 import uploadRoutes from './routes/shared/upload';
 import healthRoutes from './routes/shared/health';
 import profileRoutes from './routes/shared/profile';
+
+// Services
+import { startReminderService } from './services/reminderService';
 
 dotenv.config();
 
@@ -93,6 +99,8 @@ app.use('/api/family/activities', familyActivityRoutes);
 app.use('/api/family/appointments', familyAppointmentRoutes);
 app.use('/api/family/reports', familyReportRoutes);
 app.use('/api/family/notifications', familyNotificationRoutes);
+app.use("/api/family/medications", familyMedicationRoutes);
+app.use("/api/family/health-risk", familyHealthRiskRoutes);
 
 // Caregiver Routes (ผู้ดูแล)
 app.use('/api/caregiver/tasks', caregiverTaskRoutes);
@@ -101,6 +109,7 @@ app.use('/api/caregiver/moods', caregiverMoodRoutes);
 app.use('/api/caregiver/expenses', caregiverExpenseRoutes);
 app.use('/api/caregiver/reports', caregiverReportRoutes);
 app.use('/api/caregiver/attendance', caregiverAttendanceRoutes);
+app.use("/api/caregiver/medications", caregiverMedicationRoutes);
 
 // Shared Routes (ใช้ร่วมกัน)
 app.use('/api/upload', uploadRoutes);
@@ -124,6 +133,9 @@ app.listen(PORT, () => {
   console.log(`📂 API Base URL: http://localhost:${PORT}/api`);
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
+  
+  // เริ่มระบบแจ้งเตือนอัตโนมัติ
+  startReminderService();
 });
 
 export default app;

@@ -3,9 +3,10 @@ import { useState, useMemo } from 'react';
 import { 
   Home, Activity, Wallet, FileCheck, User, AlertTriangle, Bell, 
   CheckCircle, ChevronRight, ShoppingBag, Plus, Send, Trash2, MessageSquare,
-  CloudSun, Sun, Sunset, Moon, Info, ClipboardList, Camera, X
+  CloudSun, Sun, Sunset, Moon, Info, ClipboardList, Camera, X, Pill
 } from 'lucide-react';
 import CustomAlert from '../CustomAlert';
+import MedicationsTab from './MedicationsTab';
 
 // --- Types & Mock Data ---
 interface Task { id: string; time: string; title: string; detail: string; instruction: string; status: 'done'|'pending'; }
