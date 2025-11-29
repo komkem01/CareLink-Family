@@ -39,8 +39,10 @@ router.get('/', authenticateToken, requireFamily, async (req: Request, res: Resp
 });
 
 // POST /api/family/bills
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', authenticateToken, requireFamily, async (req: Request, res: Response) => {
   try {
+    const userId = req.userId as string;
+    const userName = req.userName as string; // จาก JWT
     const { description, amount, category, elderId } = req.body;
 
     const bill = await prisma.bill.create({
@@ -49,6 +51,8 @@ router.post('/', async (req: Request, res: Response) => {
         amount: parseFloat(amount),
         category,
         addedBy: 'family',
+        addedByName: userName,
+        addedById: userId,
         elderId
       }
     });
@@ -61,7 +65,7 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // PATCH /api/family/bills/:id
-router.patch('/:id', async (req: Request, res: Response) => {
+router.patch('/:id', authenticateToken, requireFamily, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { description, amount, category } = req.body;
@@ -83,7 +87,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
 });
 
 // DELETE /api/family/bills/:id
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', authenticateToken, requireFamily, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
@@ -99,18 +103,26 @@ router.delete('/:id', async (req: Request, res: Response) => {
 });
 
 // PATCH /api/family/bills/:id/toggle-paid
-router.patch('/:id/toggle-paid', async (req: Request, res: Response) => {
+router.patch('/:id/toggle-paid', authenticateToken, requireFamily, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const userId = req.userId as string;
 
     const bill = await prisma.bill.findUnique({ where: { id } });
     if (!bill) {
       return res.status(404).json({ error: 'Bill not found' });
     }
 
+    const newPaidStatus = !bill.isPaid;
+
     const updated = await prisma.bill.update({
       where: { id },
-      data: { isPaid: !bill.isPaid }
+      data: { 
+        isPaid: newPaidStatus,
+        paidAt: newPaidStatus ? new Date() : null,
+        // บันทึกว่าใครจ่าย (ถ้ามีการจ่าย)
+        ...(newPaidStatus && { addedById: userId })
+      }
     });
 
     res.json(updated);

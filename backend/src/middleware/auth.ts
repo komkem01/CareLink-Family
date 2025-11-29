@@ -7,6 +7,7 @@ declare global {
     interface Request {
       userId?: string;
       userType?: 'family' | 'caregiver';
+      userName?: string;
     }
   }
 }
@@ -24,6 +25,7 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
     const decoded = verifyToken(token);
     req.userId = decoded.userId;
     req.userType = decoded.type as 'family' | 'caregiver';
+    req.userName = decoded.name; // เพิ่ม userName จาก JWT
     
     next();
   } catch (error) {

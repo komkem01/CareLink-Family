@@ -108,9 +108,13 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Activity not found' });
     }
 
+    const newCompletedStatus = !activity.completed;
     const updated = await prisma.activity.update({
       where: { id },
-      data: { completed: !activity.completed }
+      data: { 
+        completed: newCompletedStatus,
+        completedAt: newCompletedStatus ? new Date() : null
+      }
     });
 
     res.json(updated);

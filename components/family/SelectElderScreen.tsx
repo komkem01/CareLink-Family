@@ -1,7 +1,7 @@
 "use client";
 import React, { useState } from "react";
 import Cookies from "js-cookie";
-import { Plus, Users, ChevronRight, Edit, Trash2, UserPlus } from "lucide-react";
+import { Plus, Users, ChevronRight, Edit, Trash2, UserPlus, LogOut } from "lucide-react";
 import CustomAlert from "../CustomAlert";
 
 interface Elder {
@@ -19,6 +19,7 @@ interface Props {
 export default function SelectElderScreen({ onSelectElder }: Props) {
   const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "";
   const token = typeof window !== "undefined" ? Cookies.get("token") || "" : "";
+  const [confirmLogout, setConfirmLogout] = useState(false);
   const [elders, setElders] = useState<Elder[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
@@ -275,18 +276,44 @@ export default function SelectElderScreen({ onSelectElder }: Props) {
     })();
   };
 
+  const handleLogout = async () => {
+    try {
+      await fetch(`${BASE_URL}/auth/logout`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    } catch (error) {
+      // ไม่ต้อง alert เพราะจะ logout อยู่ดี
+    } finally {
+      Cookies.remove("token");
+      window.location.href = "/family";
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col bg-gradient-to-br from-purple-50 to-blue-50 overflow-hidden">
       {/* Header */}
       <div className="bg-gradient-to-r from-purple-600 to-blue-600 px-6 py-8 rounded-b-3xl shadow-lg shrink-0">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-12 h-12 rounded-full bg-white/20 border-2 border-white/30 flex items-center justify-center">
-            <Users size={28} className="text-white" />
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-full bg-white/20 border-2 border-white/30 flex items-center justify-center">
+              <Users size={28} className="text-white" />
+            </div>
+            <div>
+              <p className="text-purple-100 text-xs">ยินดีต้อนรับ</p>
+              <p className="text-white text-2xl font-bold">เลือกผู้สูงอายุ</p>
+            </div>
           </div>
-          <div>
-            <p className="text-purple-100 text-xs">ยินดีต้อนรับ</p>
-            <p className="text-white text-2xl font-bold">เลือกผู้สูงอายุ</p>
-          </div>
+          <button
+            onClick={() => setConfirmLogout(true)}
+            className="bg-white/20 hover:bg-white/30 text-white font-bold px-4 py-2 rounded-full shadow-lg active:scale-95 flex items-center gap-2 border border-white/30 transition-all"
+            title="ออกจากระบบ"
+          >
+            <LogOut size={18} />
+            <span className="hidden sm:inline">ออกจากระบบ</span>
+          </button>
         </div>
         <p className="text-purple-100 text-sm mt-2">เลือกคนที่ต้องการดูแลหรือเพิ่มคนใหม่</p>
       </div>
@@ -534,6 +561,34 @@ export default function SelectElderScreen({ onSelectElder }: Props) {
                 onClick={() => handleDeleteElderConfirmed(confirmDeleteId)}
               >
                 ลบ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Logout Dialog */}
+      {confirmLogout && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-xl p-8 max-w-sm w-full mx-4">
+            <h3 className="text-lg font-bold mb-4 text-gray-800">
+              ยืนยันการออกจากระบบ
+            </h3>
+            <p className="mb-6 text-gray-600">
+              คุณต้องการออกจากระบบจริงหรือไม่?
+            </p>
+            <div className="flex gap-3">
+              <button
+                className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 font-bold hover:bg-gray-200"
+                onClick={() => setConfirmLogout(false)}
+              >
+                ยกเลิก
+              </button>
+              <button
+                className="flex-1 py-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-700"
+                onClick={handleLogout}
+              >
+                ออกจากระบบ
               </button>
             </div>
           </div>

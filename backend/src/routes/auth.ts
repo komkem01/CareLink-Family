@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import prisma from '../lib/prisma';
 import { generateToken } from '../lib/auth';
+import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
 
@@ -29,8 +30,8 @@ router.post('/family/register', async (req: Request, res: Response) => {
       },
     });
 
-    // Generate token
-    const token = generateToken(user.id, 'family');
+    // Generate token with name
+    const token = generateToken(user.id, 'family', user.name);
 
     // Extract request details for session tracking
     const userAgent = req.get('User-Agent') || 'Unknown';
@@ -79,8 +80,8 @@ router.post('/family/login', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // Generate token
-    const token = generateToken(user.id, 'family');
+    // Generate token with name
+    const token = generateToken(user.id, 'family', user.name);
 
     // Extract request details for session tracking
     const userAgent = req.get('User-Agent') || 'Unknown';
@@ -127,7 +128,7 @@ router.post('/caregiver/login', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const token = generateToken(caregiver.id, 'caregiver');
+    const token = generateToken(caregiver.id, 'caregiver', caregiver.name);
 
     res.json({
       message: 'Login successful',
@@ -170,6 +171,26 @@ router.post('/caregiver/pairing', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Pairing error:', error);
     res.status(500).json({ error: 'Failed to verify pairing', message: error.message });
+  }
+});
+
+// Logout - Delete session from database
+router.post('/logout', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (token) {
+      // ลบ session ที่ใช้ token นี้ออกจากฐานข้อมูล
+      await prisma.session.deleteMany({
+        where: { token }
+      });
+    }
+
+    res.json({ message: 'Logged out successfully' });
+  } catch (error: any) {
+    console.error('Logout error:', error);
+    res.status(500).json({ error: 'Failed to logout', message: error.message });
   }
 });
 

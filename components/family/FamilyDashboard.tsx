@@ -81,6 +81,7 @@ interface Activity {
   time: string;
   date: string;
   completed: boolean;
+  completedAt?: string | null;
 }
 
 interface Appointment {
@@ -94,14 +95,19 @@ interface Appointment {
   reminder: boolean;
 }
 
+const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api";
+
 interface Props {
   selectedElder: Elder;
   onBack: () => void; // ฟังก์ชันย้อนกลับไปเลือกคุณยาย
 }
 
 export default function FamilyDashboard({ selectedElder, onBack }: Props) {
+  const [editingBill, setEditingBill] = useState<Bill | null>(null);
   const [activeTab, setActiveTab] = useState("home");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmDeleteActivityId, setConfirmDeleteActivityId] = useState<string | null>(null);
+  const [confirmDeleteBillId, setConfirmDeleteBillId] = useState<string | null>(null);
   const [caregivers, setCaregivers] = useState<Caregiver[]>([
     {
       id: "1",
@@ -121,64 +127,63 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
       workSchedule: "จันทร์-ศุกร์ 8:00-17:00",
     },
   ]);
-  const [bills, setBills] = useState<Bill[]>([
-    {
-      id: "1",
-      date: "2024-11-25",
-      description: "ค่ายา",
-      amount: 1500,
-      isPaid: true,
-      category: "medical",
-      addedBy: "caregiver",
-      addedByName: "คุณมานี",
-    },
-    {
-      id: "2",
-      date: "2024-11-26",
-      description: "ค่าอาหาร",
-      amount: 800,
-      isPaid: false,
-      category: "food",
-      addedBy: "caregiver",
-      addedByName: "คุณมานี",
-    },
-    {
-      id: "3",
-      date: "2024-11-27",
-      description: "ค่าผู้ดูแล",
-      amount: 5000,
-      isPaid: false,
-      category: "caregiver",
-      addedBy: "family",
-    },
-    {
-      id: "4",
-      date: "2024-11-26",
-      description: "ค่าตรวจเลือด",
-      amount: 2500,
-      isPaid: false,
-      category: "medical",
-      addedBy: "family",
-    },
-  ]);
-  const [activities, setActivities] = useState<Activity[]>([
-    {
-      id: "1",
-      title: "กายภาพบำบัด",
-      description: "ยืดเหยียดแขนขา 20 นาที",
-      time: "09:00",
-      date: "2024-11-27",
-      completed: false,
-    },
-    {
-      id: "2",
-      title: "ตรวจสุขภาพ",
-      description: "วัดความดันและน้ำตาล",
-      time: "14:00",
-      date: "2024-11-27",
-      completed: false,
-    },
-  ]);
+  // Bills: API states
+  const [bills, setBills] = useState<Bill[]>([]);
+  const [loadingBills, setLoadingBills] = useState(false);
+  
+  // กิจกรรม: API states
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [loadingActivities, setLoadingActivities] = useState(false);
+  const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
+  const [activityDate, setActivityDate] = useState("");
+
+  // Appointment & Activity Functions (API)
+  // const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "";
+  // ดึง token จาก cookie
+  const token = typeof window !== "undefined" ? Cookies.get("token") || "" : "";
+
+  // ดึงบัญชีจาก backend เมื่อเปลี่ยน elder
+  React.useEffect(() => {
+    if (!selectedElder?.id) return;
+    setLoadingBills(true);
+    fetch(`${BASE_URL}/family/bills?elderId=${selectedElder.id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        // แปลง amount เป็น number เพื่อป้องกันการต่อ string
+        const billsData = Array.isArray(data)
+          ? data.map((bill: any) => ({
+              ...bill,
+              amount: Number(bill.amount)
+            }))
+          : [];
+        setBills(billsData);
+        setLoadingBills(false);
+      })
+      .catch(() => {
+        setBills([]);
+        setLoadingBills(false);
+      });
+  }, [selectedElder?.id, BASE_URL, token]);
+
+  // ดึงกิจกรรมจาก backend เมื่อเปลี่ยน elder
+  React.useEffect(() => {
+    if (!selectedElder?.id) return;
+    setLoadingActivities(true);
+    fetch(`${BASE_URL}/family/activities?elderId=${selectedElder.id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        setActivities(Array.isArray(data) ? data : []);
+        setLoadingActivities(false);
+      })
+      .catch(() => {
+        setActivities([]);
+        setLoadingActivities(false);
+      });
+  }, [selectedElder?.id, BASE_URL, token]);
 
   type AlertType = "info" | "error" | "success";
   const [alert, setAlert] = useState<{
@@ -707,79 +712,315 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
     showAlertMessage("ลบแล้ว", "ลบผู้ดูแลเรียบร้อย", "info");
   };
 
-  const handleAddBill = () => {
+  // เพิ่มบัญชีผ่าน API
+  const handleAddBill = async () => {
     if (!billDesc || !billAmount || !billCategory) {
       showAlertMessage("ข้อมูลไม่ครบ", "กรุณากรอกข้อมูลให้ครบทุกช่อง", "error");
       return;
     }
-
-    const newBill: Bill = {
-      id: Date.now().toString(),
-      date: new Date().toISOString().split("T")[0],
-      description: billDesc,
-      amount: parseFloat(billAmount),
-      isPaid: false,
-      category: billCategory,
-      addedBy: "family", // ลูกหลานเป็นคนเพิ่ม
-    };
-
-    setBills([...bills, newBill]);
-    setBillDesc("");
-    setBillAmount("");
-    setBillCategory("");
-    setShowBillForm(false);
-    showAlertMessage("เพิ่มสำเร็จ", "เพิ่มรายการบัญชีเรียบร้อย", "success");
+    try {
+      let res, data;
+      if (editingBill) {
+        // กรณีแก้ไขบิล
+        res = await fetch(`${BASE_URL}/family/bills/${editingBill.id}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            description: billDesc,
+            amount: parseFloat(billAmount),
+            category: billCategory,
+          }),
+        });
+        data = await res.json();
+        if (res.ok && data.id) {
+          setBillDesc("");
+          setBillAmount("");
+          setBillCategory("");
+          setEditingBill(null);
+          setShowBillForm(false);
+          showAlertMessage("แก้ไขสำเร็จ", "แก้ไขรายการบัญชีเรียบร้อย", "success");
+          setLoadingBills(true);
+          setTimeout(() => reloadBills(), 300);
+        } else {
+          showAlertMessage(
+            "แก้ไขล้มเหลว",
+            data.message || "เกิดข้อผิดพลาดในการแก้ไขรายการ",
+            "error"
+          );
+        }
+      } else {
+        // กรณีเพิ่มบิลใหม่
+        res = await fetch(`${BASE_URL}/family/bills`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            description: billDesc,
+            amount: parseFloat(billAmount),
+            category: billCategory,
+            elderId: selectedElder.id,
+          }),
+        });
+        data = await res.json();
+        if (res.ok && data.id) {
+          setBillDesc("");
+          setBillAmount("");
+          setBillCategory("");
+          setShowBillForm(false);
+          showAlertMessage("เพิ่มสำเร็จ", "เพิ่มรายการบัญชีเรียบร้อย", "success");
+          setLoadingBills(true);
+          setTimeout(() => reloadBills(), 300);
+        } else {
+          showAlertMessage(
+            "เพิ่มล้มเหลว",
+            data.message || "เกิดข้อผิดพลาดในการเพิ่มรายการ",
+            "error"
+          );
+        }
+      }
+    } catch {
+      showAlertMessage("ข้อผิดพลาด", "เกิดข้อผิดพลาดในการบันทึกข้อมูล", "error");
+    }
   };
 
-  const toggleBillPaid = (id: string) => {
-    setBills(bills.map((b) => (b.id === id ? { ...b, isPaid: !b.isPaid } : b)));
+  // โหลดบัญชีใหม่
+  const reloadBills = () => {
+    fetch(`${BASE_URL}/family/bills?elderId=${selectedElder.id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        // แปลง amount เป็น number เพื่อป้องกันการต่อ string
+        const billsData = Array.isArray(data) 
+          ? data.map((bill: any) => ({
+              ...bill,
+              amount: Number(bill.amount)
+            }))
+          : [];
+        setBills(billsData);
+        setLoadingBills(false);
+      });
   };
 
+  // toggle paid status ผ่าน API
+  const toggleBillPaid = async (id: string) => {
+    try {
+      const res = await fetch(`${BASE_URL}/family/bills/${id}/toggle-paid`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok && data.id) {
+        setLoadingBills(true);
+        setTimeout(() => reloadBills(), 300);
+      } else {
+        showAlertMessage(
+          "เปลี่ยนสถานะล้มเหลว",
+          data.message || "เกิดข้อผิดพลาดในการเปลี่ยนสถานะ",
+          "error"
+        );
+      }
+    } catch {
+      showAlertMessage("ข้อผิดพลาด", "เกิดข้อผิดพลาดในการเปลี่ยนสถานะ", "error");
+    }
+  };
+
+  // ลบบัญชีผ่าน API
   const handleDeleteBill = (id: string) => {
-    setBills(bills.filter((b) => b.id !== id));
-    showAlertMessage("ลบแล้ว", "ลบรายการบัญชีเรียบร้อย", "info");
+    setConfirmDeleteBillId(id);
   };
 
-  const handleAddActivity = () => {
+  const handleDeleteBillConfirmed = async (id: string) => {
+    try {
+      const res = await fetch(`${BASE_URL}/family/bills/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showAlertMessage("ลบแล้ว", "ลบรายการบัญชีเรียบร้อย", "info");
+        setLoadingBills(true);
+        setTimeout(() => reloadBills(), 300);
+      } else {
+        showAlertMessage("ลบล้มเหลว", data.message || "เกิดข้อผิดพลาดในการลบ", "error");
+      }
+    } catch {
+      showAlertMessage("ข้อผิดพลาด", "เกิดข้อผิดพลาดในการลบข้อมูล", "error");
+    } finally {
+      setConfirmDeleteBillId(null);
+    }
+  };
+
+  // เพิ่มหรือแก้ไขกิจกรรมผ่าน API
+  const handleAddActivity = async () => {
     if (!activityTitle || !activityDesc || !activityTime) {
       showAlertMessage("ข้อมูลไม่ครบ", "กรุณากรอกข้อมูลให้ครบทุกช่อง", "error");
       return;
     }
+    try {
+      if (editingActivity) {
+        // PATCH
+        const res = await fetch(
+          `${BASE_URL}/family/activities/${editingActivity.id}`,
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              title: activityTitle,
+              description: activityDesc,
+              time: activityTime,
+              date: activityDate || editingActivity.date,
+            }),
+          }
+        );
+        const data = await res.json();
+        if (res.ok && data.id) {
+          showAlertMessage("แก้ไขสำเร็จ", "แก้ไขกิจกรรมเรียบร้อย", "success");
+          setEditingActivity(null);
+          setActivityTitle("");
+          setActivityDesc("");
+          setActivityTime("");
+          setActivityDate("");
+          setShowActivityForm(false);
+          setLoadingActivities(true);
+          setTimeout(() => reloadActivities(), 300);
+        } else {
+          showAlertMessage(
+            "แก้ไขล้มเหลว",
+            data.message || "เกิดข้อผิดพลาดในการแก้ไขกิจกรรม",
+            "error"
+          );
+        }
+      } else {
+        // POST
+        const res = await fetch(`${BASE_URL}/family/activities`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            title: activityTitle,
+            description: activityDesc,
+            time: activityTime,
+            date: new Date().toISOString().split("T")[0],
+            elderId: selectedElder.id,
+          }),
+        });
+        const data = await res.json();
+        if (res.ok && data.id) {
+          setActivityTitle("");
+          setActivityDesc("");
+          setActivityTime("");
+          setActivityDate("");
+          setShowActivityForm(false);
+          showAlertMessage("เพิ่มสำเร็จ", "เพิ่มกิจกรรมเรียบร้อย", "success");
+          setLoadingActivities(true);
+          setTimeout(() => reloadActivities(), 300);
+        } else {
+          showAlertMessage(
+            "เพิ่มล้มเหลว",
+            data.message || "เกิดข้อผิดพลาดในการเพิ่มกิจกรรม",
+            "error"
+          );
+        }
+      }
+    } catch {
+      showAlertMessage("ข้อผิดพลาด", "เกิดข้อผิดพลาดในการบันทึกกิจกรรม", "error");
+    }
+  };
 
-    const newActivity: Activity = {
-      id: Date.now().toString(),
-      title: activityTitle,
-      description: activityDesc,
-      time: activityTime,
-      date: new Date().toISOString().split("T")[0],
-      completed: false,
-    };
+  // โหลดกิจกรรมใหม่
+  const reloadActivities = () => {
+    fetch(`${BASE_URL}/family/activities?elderId=${selectedElder.id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        setActivities(Array.isArray(data) ? data : []);
+        setLoadingActivities(false);
+      });
+  };
 
-    setActivities([...activities, newActivity]);
+  // toggle completed ผ่าน API
+  const toggleActivityComplete = async (id: string) => {
+    try {
+      const res = await fetch(`${BASE_URL}/family/activities/${id}/toggle`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok && data.id) {
+        setLoadingActivities(true);
+        setTimeout(() => reloadActivities(), 300);
+      } else {
+        showAlertMessage(
+          "เปลี่ยนสถานะล้มเหลว",
+          data.message || "เกิดข้อผิดพลาดในการเปลี่ยนสถานะกิจกรรม",
+          "error"
+        );
+      }
+    } catch {
+      showAlertMessage("ข้อผิดพลาด", "เกิดข้อผิดพลาดในการเปลี่ยนสถานะกิจกรรม", "error");
+    }
+  };
+
+  // ลบกิจกรรมผ่าน API
+  const handleDeleteActivity = (id: string) => {
+    setConfirmDeleteActivityId(id);
+  };
+
+  // ฟังก์ชันลบจริงหลังยืนยัน
+  const handleDeleteActivityConfirmed = async (id: string) => {
+    try {
+      const res = await fetch(`${BASE_URL}/family/activities/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showAlertMessage("ลบแล้ว", "ลบกิจกรรมเรียบร้อย", "info");
+        setLoadingActivities(true);
+        setTimeout(() => reloadActivities(), 300);
+      } else {
+        showAlertMessage("ลบล้มเหลว", data.message || "เกิดข้อผิดพลาดในการลบกิจกรรม", "error");
+      }
+    } catch {
+      showAlertMessage("ข้อผิดพลาด", "เกิดข้อผิดพลาดในการลบกิจกรรม", "error");
+    }
+    setConfirmDeleteActivityId(null);
+  };
+
+  // กดแก้ไขกิจกรรม
+  const handleEditActivity = (activity: Activity) => {
+    setEditingActivity(activity);
+    setActivityTitle(activity.title);
+    setActivityDesc(activity.description);
+    setActivityTime(activity.time);
+    setActivityDate(activity.date);
+    setShowActivityForm(true);
+    setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    }, 100);
+  };
+
+  // ยกเลิกฟอร์มกิจกรรม
+  const handleCancelActivityForm = () => {
+    setEditingActivity(null);
     setActivityTitle("");
     setActivityDesc("");
     setActivityTime("");
+    setActivityDate("");
     setShowActivityForm(false);
-    showAlertMessage("เพิ่มสำเร็จ", "เพิ่มกิจกรรมเรียบร้อย", "success");
   };
-
-  const toggleActivityComplete = (id: string) => {
-    setActivities(
-      activities.map((a) =>
-        a.id === id ? { ...a, completed: !a.completed } : a
-      )
-    );
-  };
-
-  const handleDeleteActivity = (id: string) => {
-    setActivities(activities.filter((a) => a.id !== id));
-    showAlertMessage("ลบแล้ว", "ลบกิจกรรมเรียบร้อย", "info");
-  };
-
-  // Appointment Functions (API)
-  const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "";
-  // ดึง token จาก cookie
-  const token = typeof window !== "undefined" ? Cookies.get("token") || "" : "";
 
   // ดึง appointments จาก backend เมื่อเปลี่ยน elder หรือเดือน
   React.useEffect(() => {
@@ -1056,10 +1297,10 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   };
 
-  const totalBills = bills.reduce((sum, b) => sum + b.amount, 0);
+  const totalBills = bills.reduce((sum, b) => sum + Number(b.amount), 0);
   const unpaidBills = bills
     .filter((b) => !b.isPaid)
-    .reduce((sum, b) => sum + b.amount, 0);
+    .reduce((sum, b) => sum + Number(b.amount), 0);
   const todayActivities = activities.filter((a) => !a.completed).length;
 
   return (
@@ -1740,92 +1981,126 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
 
             {/* Bill List */}
             <div className="space-y-3">
-              {bills.map((bill) => (
-                <div
-                  key={bill.id}
-                  className={`bg-white rounded-2xl p-5 shadow-sm border transition-all ${
-                    bill.isPaid
-                      ? "border-green-200 bg-green-50/30"
-                      : "border-gray-100"
-                  }`}
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <h3
-                          className={`text-lg font-bold ${
-                            bill.isPaid
-                              ? "text-gray-500 line-through"
-                              : "text-gray-800"
-                          }`}
-                        >
-                          {bill.description}
-                        </h3>
-                        {bill.isPaid && (
-                          <CheckCircle2 size={20} className="text-green-600" />
-                        )}
-                      </div>
-                      <p className="text-sm text-gray-500">{bill.date}</p>
-                      <p className="text-2xl font-bold text-gray-900 mt-2">
-                        {bill.amount.toLocaleString()} บาท
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => toggleBillPaid(bill.id)}
-                        className={`p-2 rounded-xl ${
-                          bill.isPaid
-                            ? "bg-gray-100 text-gray-600"
-                            : "bg-green-100 text-green-600"
-                        } hover:opacity-80`}
-                      >
-                        {bill.isPaid ? (
-                          <XCircle size={18} />
-                        ) : (
-                          <CheckCircle2 size={18} />
-                        )}
-                      </button>
-                      <button
-                        onClick={() => handleDeleteBill(bill.id)}
-                        className="p-2 bg-red-50 rounded-xl hover:bg-red-100 text-red-600"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span
-                      className={`text-xs px-3 py-1 rounded-full font-bold ${
-                        bill.isPaid
-                          ? "bg-green-100 text-green-700"
-                          : "bg-red-100 text-red-700"
-                      }`}
-                    >
-                      {bill.isPaid ? "✓ จ่ายแล้ว" : "✗ ยังไม่จ่าย"}
-                    </span>
-                    <span className="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-full font-medium">
-                      {bill.category === "medical"
-                        ? "💊 รักษาพยาบาล"
-                        : bill.category === "food"
-                        ? "🍚 อาหาร"
-                        : bill.category === "caregiver"
-                        ? "👩‍⚕️ ผู้ดูแล"
-                        : "📌 อื่นๆ"}
-                    </span>
-                    <span
-                      className={`text-xs px-3 py-1 rounded-full font-bold ${
-                        bill.addedBy === "caregiver"
-                          ? "bg-blue-100 text-blue-700"
-                          : "bg-purple-100 text-purple-700"
-                      }`}
-                    >
-                      {bill.addedBy === "caregiver"
-                        ? `👤 ${bill.addedByName || "ผู้ดูแล"}`
-                        : "👨‍👩‍👧 ครอบครัว"}
-                    </span>
-                  </div>
+              {loadingBills ? (
+                <div className="text-center py-8 text-gray-400">
+                  กำลังโหลด...
                 </div>
-              ))}
+              ) : bills.length === 0 ? (
+                <div className="text-center py-8 text-gray-400">
+                  ยังไม่มีรายการบัญชี
+                </div>
+              ) : (
+                bills.map((bill) => {
+                  // แปลงหมวดหมู่เป็นภาษาไทย
+                  const categoryMap: { [key: string]: string } = {
+                    medical: 'ค่ารักษาพยาบาล',
+                    food: 'ค่าอาหาร',
+                    caregiver: 'ค่าผู้ดูแล',
+                    other: 'อื่นๆ'
+                  };
+                  const categoryText = categoryMap[bill.category] || bill.category;
+                  
+                  return (
+                    <div
+                      key={bill.id}
+                      className={`bg-white rounded-2xl p-5 shadow-sm border transition-all ${
+                        bill.isPaid
+                          ? "border-green-200 bg-green-50/30"
+                          : "border-yellow-200 bg-yellow-50/20"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
+                            <h3 className="text-lg font-bold text-gray-800">
+                              {bill.description}
+                            </h3>
+                            {/* สถานะการจ่าย */}
+                            <span
+                              className={`px-3 py-1 rounded-full text-xs font-bold ${
+                                bill.isPaid
+                                  ? "bg-green-100 text-green-700"
+                                  : "bg-yellow-100 text-yellow-700"
+                              }`}
+                            >
+                              {bill.isPaid ? "จ่ายแล้ว ✓" : "ยังไม่จ่าย"}
+                            </span>
+                          </div>
+                          
+                          {/* วันที่ */}
+                          <p className="text-sm text-gray-500 mb-2">
+                            {new Date(bill.date).toLocaleDateString('th-TH', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric'
+                            })}
+                          </p>
+                          
+                          {/* จำนวนเงิน */}
+                          <p className="text-2xl font-bold text-gray-900 mt-2 mb-3">
+                            {Number(bill.amount).toLocaleString('th-TH', { 
+                              minimumFractionDigits: 0,
+                              maximumFractionDigits: 2 
+                            })} บาท
+                          </p>
+                          
+                          {/* หมวดหมู่และผู้สร้าง */}
+                          <div className="flex flex-wrap gap-2 items-center">
+                            <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs font-medium">
+                              📁 {categoryText}
+                            </span>
+                            {bill.addedByName && (
+                              <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-lg text-xs font-medium">
+                                👤 {bill.addedByName}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* ปุ่มจัดการ */}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => toggleBillPaid(bill.id)}
+                            className={`p-2 rounded-xl transition-all active:scale-95 ${
+                              bill.isPaid
+                                ? "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                : "bg-green-100 text-green-600 hover:bg-green-200"
+                            }`}
+                            title={bill.isPaid ? "ยกเลิกจ่ายแล้ว" : "ทำเครื่องหมายจ่ายแล้ว"}
+                          >
+                            {bill.isPaid ? (
+                              <XCircle size={18} />
+                            ) : (
+                              <CheckCircle2 size={18} />
+                            )}
+                          </button>
+                          <button
+                            onClick={() => {
+                              // เตรียมข้อมูลสำหรับแก้ไขบิล
+                              setBillDesc(bill.description);
+                              setBillAmount(bill.amount.toString());
+                              setBillCategory(bill.category);
+                              setEditingBill(bill);
+                              setShowBillForm(true);
+                            }}
+                            className="p-2 bg-yellow-50 rounded-xl hover:bg-yellow-100 text-yellow-600 transition-all active:scale-95"
+                            title="แก้ไข"
+                          >
+                            <Edit size={18} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteBill(bill.id)}
+                            className="p-2 bg-red-50 rounded-xl hover:bg-red-100 text-red-600 transition-all active:scale-95"
+                            title="ลบ"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         )}
@@ -2201,12 +2476,20 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
               </button>
             </div>
 
-            {/* Add Form */}
+            {/* Add/Edit Form */}
             {showActivityForm && (
               <div className="bg-white rounded-3xl p-6 shadow-lg border-2 border-blue-200 mb-6">
-                <h3 className="text-lg font-bold text-gray-800 mb-4">
-                  เพิ่มกิจกรรมใหม่
-                </h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-gray-800">
+                    {editingActivity ? "แก้ไขกิจกรรม" : "เพิ่มกิจกรรมใหม่"}
+                  </h3>
+                  <button
+                    onClick={handleCancelActivityForm}
+                    className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                  >
+                    <X size={20} className="text-gray-400" />
+                  </button>
+                </div>
                 <div className="space-y-4">
                   <input
                     type="text"
@@ -2229,16 +2512,24 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                   />
                   <div className="flex gap-3">
                     <button
-                      onClick={() => setShowActivityForm(false)}
-                      className="flex-1 bg-gray-100 text-gray-600 font-bold py-3 rounded-xl hover:bg-gray-200"
+                      onClick={handleCancelActivityForm}
+                      className="flex-1 bg-gray-100 text-gray-600 font-bold py-3 rounded-xl hover:bg-gray-200 transition-colors"
                     >
                       ยกเลิก
                     </button>
                     <button
                       onClick={handleAddActivity}
-                      className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700"
+                      className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
                     >
-                      เพิ่ม
+                      {editingActivity ? (
+                        <>
+                          <Save size={18} /> บันทึก
+                        </>
+                      ) : (
+                        <>
+                          <Plus size={18} /> เพิ่ม
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
@@ -2247,59 +2538,97 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
 
             {/* Activity List */}
             <div className="space-y-4">
-              {activities.map((activity) => (
-                <div
-                  key={activity.id}
-                  className={`bg-white rounded-2xl p-5 shadow-sm border ${
-                    activity.completed
-                      ? "border-blue-200 bg-blue-50/30"
-                      : "border-gray-100"
-                  }`}
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-3 flex-1">
-                      <button
-                        onClick={() => toggleActivityComplete(activity.id)}
-                        className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                          activity.completed
-                            ? "bg-blue-500"
-                            : "bg-gray-100 hover:bg-gray-200"
-                        } transition-colors`}
-                      >
-                        {activity.completed && (
-                          <CheckCircle2 size={24} className="text-white" />
-                        )}
-                      </button>
-                      <div className="flex-1">
-                        <h3
-                          className={`text-lg font-bold ${
+              {loadingActivities ? (
+                <div className="text-center py-8 text-gray-400">
+                  กำลังโหลด...
+                </div>
+              ) : activities.length === 0 ? (
+                <div className="text-center py-8 text-gray-400">
+                  ยังไม่มีกิจกรรม
+                </div>
+              ) : (
+                activities.map((activity) => (
+                  <div
+                    key={activity.id}
+                    className={`bg-white rounded-2xl p-5 shadow-sm border transition-all ${
+                      activity.completed
+                        ? "border-green-200 bg-green-50/30"
+                        : "border-gray-100"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-3 flex-1">
+                        <button
+                          onClick={() => toggleActivityComplete(activity.id)}
+                          className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all active:scale-95 ${
                             activity.completed
-                              ? "text-gray-500 line-through"
-                              : "text-gray-800"
+                              ? "bg-green-500 hover:bg-green-600"
+                              : "bg-gray-100 hover:bg-gray-200"
                           }`}
+                          title={activity.completed ? "คลิกเพื่อยกเลิกการทำเสร็จ" : "คลิกเพื่อทำเสร็จ"}
                         >
-                          {activity.title}
-                        </h3>
-                        <p className="text-sm text-gray-600 mt-1">
-                          {activity.description}
-                        </p>
-                        <div className="flex items-center gap-2 mt-2">
-                          <Clock size={14} className="text-gray-400" />
-                          <span className="text-xs text-gray-500">
-                            {activity.time} น.
-                          </span>
+                          {activity.completed && (
+                            <CheckCircle2 size={24} className="text-white" />
+                          )}
+                        </button>
+                        <div className="flex-1">
+                          <h3
+                            className={`text-lg font-bold ${
+                              activity.completed
+                                ? "text-gray-500 line-through"
+                                : "text-gray-800"
+                            }`}
+                          >
+                            {activity.title}
+                          </h3>
+                          <p className={`text-sm mt-1 ${
+                            activity.completed ? "text-gray-400" : "text-gray-600"
+                          }`}>
+                            {activity.description}
+                          </p>
+                          <div className="flex items-center gap-4 mt-2">
+                            <div className="flex items-center gap-2">
+                              <Clock size={14} className="text-gray-400" />
+                              <span className="text-xs text-gray-500">
+                                {activity.time} น.
+                              </span>
+                            </div>
+                            {activity.completed && activity.completedAt && (
+                              <div className="flex items-center gap-2">
+                                <CheckCircle2 size={14} className="text-green-500" />
+                                <span className="text-xs text-green-600">
+                                  ทำเสร็จ {new Date(activity.completedAt).toLocaleString('th-TH', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </span>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleEditActivity(activity)}
+                          className="p-2 bg-blue-50 rounded-xl hover:bg-blue-100 text-blue-600 transition-colors active:scale-95"
+                          title="แก้ไข"
+                        >
+                          <Edit size={18} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteActivity(activity.id)}
+                          className="p-2 bg-red-50 rounded-xl hover:bg-red-100 text-red-600 transition-colors active:scale-95"
+                          title="ลบ"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
                     </div>
-                    <button
-                      onClick={() => handleDeleteActivity(activity.id)}
-                      className="p-2 bg-red-50 rounded-xl hover:bg-red-100 text-red-600"
-                    >
-                      <Trash2 size={18} />
-                    </button>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         )}
@@ -2816,6 +3145,62 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
               <button
                 className="flex-1 py-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-700"
                 onClick={() => handleDeleteAppointmentConfirmed(confirmDeleteId)}
+              >
+                ลบ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Delete Activity Dialog */}
+      {confirmDeleteActivityId && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-xl p-8 max-w-sm w-full">
+            <h3 className="text-lg font-bold mb-4 text-gray-800">
+              ยืนยันการลบกิจกรรม
+            </h3>
+            <p className="mb-6 text-gray-600">
+              คุณต้องการลบกิจกรรมนี้จริงหรือไม่? การลบจะไม่สามารถย้อนกลับได้
+            </p>
+            <div className="flex gap-3">
+              <button
+                className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 font-bold hover:bg-gray-200 transition-colors"
+                onClick={() => setConfirmDeleteActivityId(null)}
+              >
+                ยกเลิก
+              </button>
+              <button
+                className="flex-1 py-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-700 transition-colors"
+                onClick={() => handleDeleteActivityConfirmed(confirmDeleteActivityId)}
+              >
+                ลบ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Delete Bill Dialog */}
+      {confirmDeleteBillId && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-xl p-8 max-w-sm w-full">
+            <h3 className="text-lg font-bold mb-4 text-gray-800">
+              ยืนยันการลบรายการบัญชี
+            </h3>
+            <p className="mb-6 text-gray-600">
+              คุณต้องการลบรายการบัญชีนี้จริงหรือไม่? การลบจะไม่สามารถย้อนกลับได้
+            </p>
+            <div className="flex gap-3">
+              <button
+                className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 font-bold hover:bg-gray-200 transition-colors"
+                onClick={() => setConfirmDeleteBillId(null)}
+              >
+                ยกเลิก
+              </button>
+              <button
+                className="flex-1 py-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-700 transition-colors"
+                onClick={() => handleDeleteBillConfirmed(confirmDeleteBillId)}
               >
                 ลบ
               </button>
