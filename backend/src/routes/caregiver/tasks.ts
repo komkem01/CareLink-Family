@@ -6,10 +6,17 @@ const router = Router();
 // GET /api/caregiver/tasks - ดึงรายการงานประจำวัน
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const { caregiverId, date } = req.query;
+    const { caregiverId, elderId, date } = req.query;
 
     const where: any = {};
-    if (caregiverId) where.caregiverId = String(caregiverId);
+    
+    // Query by elderId (preferred) or caregiverId
+    if (elderId) {
+      where.elderId = String(elderId);
+    } else if (caregiverId) {
+      where.caregiverId = String(caregiverId);
+    }
+    
     if (date) {
       const targetDate = new Date(String(date));
       const nextDay = new Date(targetDate);
@@ -40,14 +47,53 @@ router.post('/:id/complete', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
+    // อัพเดท Task
     const task = await prisma.task.update({
       where: { id },
-      data: { status: 'done' }
+      data: { 
+        status: 'done',
+        completedAt: new Date()
+      }
     });
+
+    console.log(`✅ Task ${id} marked as done by caregiver`);
+
+    // หา Activity ที่เกี่ยวข้อง และอัพเดทด้วย
+    if (task.elderId) {
+      const taskDate = new Date(task.date);
+      const startOfDay = new Date(taskDate.setHours(0, 0, 0, 0));
+      const endOfDay = new Date(taskDate.setHours(23, 59, 59, 999));
+
+      const relatedActivities = await prisma.activity.findMany({
+        where: {
+          elderId: task.elderId,
+          title: task.title,
+          time: task.time,
+          date: {
+            gte: startOfDay,
+            lt: endOfDay
+          }
+        }
+      });
+
+      // อัพเดท Activity เป็น completed
+      for (const activity of relatedActivities) {
+        if (!activity.completed) {
+          await prisma.activity.update({
+            where: { id: activity.id },
+            data: {
+              completed: true,
+              completedAt: new Date()
+            }
+          });
+          console.log(`  → Synced activity ${activity.id} to completed`);
+        }
+      }
+    }
 
     res.json(task);
   } catch (error: any) {
-    console.error('Complete task error:', error);
+    console.error('❌ Complete task error:', error);
     res.status(500).json({ error: 'Failed to complete task', message: error.message });
   }
 });

@@ -166,6 +166,7 @@ model Elder {
   reports       DailyReport[]
   medications   Medication[]
   vitalSigns    VitalSign[]
+  tasks         Task[]
 
   @@index([familyUserId])
   @@map("elders")
@@ -303,10 +304,14 @@ model Task {
   caregiverId String
   caregiver   Caregiver @relation(fields: [caregiverId], references: [id], onDelete: Cascade)
 
+  elderId String?
+  elder   Elder? @relation(fields: [elderId], references: [id], onDelete: Cascade)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([caregiverId])
+  @@index([elderId])
   @@index([date])
   @@index([status])
   @@map("tasks")

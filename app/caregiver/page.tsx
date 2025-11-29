@@ -1,18 +1,67 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import LoginScreen from '@/components/caregiver/LoginScreen';
 import PairingScreen from '@/components/caregiver/PairingScreen';
 import DashboardScreen from '@/components/caregiver/DashboardScreen';
+import Cookies from 'js-cookie';
 
 export default function CaregiverApp() {
   const router = useRouter();
   const [currentScreen, setCurrentScreen] = useState<'login' | 'pair' | 'dashboard'>('login');
+  const [pairingCode, setPairingCode] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Check for existing session on mount
+  useEffect(() => {
+    const token = Cookies.get('token');
+    const userType = Cookies.get('userType');
+    const elderId = Cookies.get('elderId');
+
+    if (token && userType === 'caregiver') {
+      // ถ้ามี token และเป็น caregiver
+      if (elderId) {
+        // ถ้ามี elderId แสดงว่า pairing เรียบร้อยแล้ว
+        setCurrentScreen('dashboard');
+      } else {
+        // ถ้ายังไม่ได้ pairing ให้ไปหน้า pairing
+        setCurrentScreen('pair');
+      }
+    } else {
+      // ถ้าไม่มี token หรือไม่ใช่ caregiver ให้อยู่หน้า login
+      setCurrentScreen('login');
+    }
+    
+    setIsLoading(false);
+  }, []);
 
   const handleBackToHome = () => {
+    // Clear cookies when going back
+    Cookies.remove('token');
+    Cookies.remove('userType');
+    Cookies.remove('userId');
+    Cookies.remove('userName');
+    Cookies.remove('elderId');
     router.push('/');
   };
+
+  const handleLoginSuccess = (code: string) => {
+    setPairingCode(code);
+    setCurrentScreen('pair');
+  };
+
+  // Show loading while checking session
+  if (isLoading) {
+    return (
+      <main className="min-h-screen flex justify-center items-center bg-gray-100">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">กำลังโหลด...</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen flex justify-center items-center sm:p-4 font-sans text-gray-800 bg-gray-100">
@@ -31,11 +80,12 @@ export default function CaregiverApp() {
         
         {/* Logic สลับหน้าจอ */}
         {currentScreen === 'login' && (
-          <LoginScreen onLoginSuccess={() => setCurrentScreen('pair')} />
+          <LoginScreen onLoginSuccess={handleLoginSuccess} />
         )}
         
         {currentScreen === 'pair' && (
           <PairingScreen 
+            pairingCode={pairingCode}
             onPairSuccess={() => setCurrentScreen('dashboard')} 
             onBack={() => setCurrentScreen('login')} 
           />
