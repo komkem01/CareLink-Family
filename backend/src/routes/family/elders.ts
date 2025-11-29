@@ -21,7 +21,7 @@ router.get('/', authenticateToken, requireFamily, async (req: Request, res: Resp
       prisma.elder.findMany({
         where: { familyUserId },
         include: {
-          caregiver: {
+          caregivers: {
             select: {
               id: true,
               name: true,
@@ -112,7 +112,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     const elder = await prisma.elder.findUnique({
       where: { id },
       include: {
-        caregiver: true,
+        caregivers: true,
         bills: {
           orderBy: { date: 'desc' },
           take: 10

@@ -31,6 +31,7 @@ import {
   X,
   ArrowLeft,
   Download,
+  MapPin,
 } from "lucide-react";
 import CustomAlert from "../CustomAlert";
 
@@ -49,18 +50,33 @@ interface Caregiver {
   email: string;
   verified: boolean;
   startDate: string;
-  pairingCode: string; // โค้ด 6 หลักสำหรับจับคู่
-  // ข้อมูลเพิ่มเติม
-  idCard: string; // เลขบัตรประชาชน
-  address: string; // ที่อยู่
-  emergencyContact: string; // เบอร์ติดต่อฉุกเฉิน
-  emergencyName: string; // ชื่อผู้ติดต่อฉุกเฉิน
-  experience: string; // ประสบการณ์ (ปี)
-  certificate: string; // ใบรับรอง/วุฒิการศึกษา
-  salary: string; // เงินเดือน
-  workSchedule: string; // เวลาทำงาน
-  idCardImage?: string; // URL รูปบัตรประชาชน
-  certificateImage?: string; // URL รูปใบรับรอง
+  pairingCode: string;
+  // ข้อมูลส่วนตัว
+  idCard: string;
+  dateOfBirth?: string;
+  gender?: string; // male, female, other
+  address: string;
+  subDistrict?: string; // ตำบล
+  district?: string; // อำเภอ
+  province?: string; // จังหวัด
+  postalCode?: string; // รหัสไปรษณีย์
+  // ผู้ติดต่อฉุกเฉิน
+  emergencyContact: string;
+  emergencyName: string;
+  emergencyRelation?: string;
+  // ข้อมูลการทำงาน
+  experience: string;
+  certificate: string;
+  // การจ้างงาน
+  salary: string;
+  salaryType: string; // monthly, daily, hourly
+  workSchedule: string;
+  employmentType: string; // full-time, part-time, contract
+  contractStartDate?: string; // วันที่เริ่มสัญญา
+  contractEndDate?: string; // วันที่สิ้นสุดสัญญา (สำหรับ contract)
+  // รูปภาพ
+  idCardImage?: string;
+  certificateImage?: string;
 }
 
 interface Bill {
@@ -108,25 +124,8 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [confirmDeleteActivityId, setConfirmDeleteActivityId] = useState<string | null>(null);
   const [confirmDeleteBillId, setConfirmDeleteBillId] = useState<string | null>(null);
-  const [caregivers, setCaregivers] = useState<Caregiver[]>([
-    {
-      id: "1",
-      name: "คุณมานี",
-      phone: "081-234-5678",
-      email: "manee@email.com",
-      verified: true,
-      startDate: "2024-01-15",
-      pairingCode: "MN2415",
-      idCard: "1234567890123",
-      address: "123 ถ.สุขุมวิท กรุงเทพฯ",
-      emergencyContact: "081-999-9999",
-      emergencyName: "คุณสมชาย (พี่ชาย)",
-      experience: "5",
-      certificate: "ประกาศนียบัตรผู้ดูแลผู้สูงอายุ",
-      salary: "15000",
-      workSchedule: "จันทร์-ศุกร์ 8:00-17:00",
-    },
-  ]);
+  const [caregivers, setCaregivers] = useState<Caregiver[]>([]);
+  const [loadingCaregivers, setLoadingCaregivers] = useState(false);
   // Bills: API states
   const [bills, setBills] = useState<Bill[]>([]);
   const [loadingBills, setLoadingBills] = useState(false);
@@ -185,6 +184,27 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
       });
   }, [selectedElder?.id, BASE_URL, token]);
 
+  // ดึงรายชื่อผู้ดูแลจาก backend (เฉพาะของผู้สูงอายุที่เลือก)
+  React.useEffect(() => {
+    if (!selectedElder?.id) {
+      setCaregivers([]);
+      return;
+    }
+    setLoadingCaregivers(true);
+    fetch(`${BASE_URL}/family/caregivers?elderId=${selectedElder.id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        setCaregivers(Array.isArray(data) ? data : []);
+        setLoadingCaregivers(false);
+      })
+      .catch(() => {
+        setCaregivers([]);
+        setLoadingCaregivers(false);
+      });
+  }, [selectedElder?.id, BASE_URL, token]);
+
   type AlertType = "info" | "error" | "success";
   const [alert, setAlert] = useState<{
     isOpen: boolean;
@@ -203,18 +223,33 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
   const [editingCaregiver, setEditingCaregiver] = useState<Caregiver | null>(
     null
   );
+  const [confirmDeleteCaregiverId, setConfirmDeleteCaregiverId] = useState<string | null>(null);
   const [caregiverName, setCaregiverName] = useState("");
   const [caregiverPhone, setCaregiverPhone] = useState("");
   const [caregiverEmail, setCaregiverEmail] = useState("");
+  const [caregiverGender, setCaregiverGender] = useState("");
+  const [caregiverDateOfBirth, setCaregiverDateOfBirth] = useState("");
   const [caregiverIdCard, setCaregiverIdCard] = useState("");
   const [caregiverAddress, setCaregiverAddress] = useState("");
+  const [caregiverSubDistrict, setCaregiverSubDistrict] = useState("");
+  const [caregiverDistrict, setCaregiverDistrict] = useState("");
+  const [caregiverProvince, setCaregiverProvince] = useState("");
+  const [caregiverPostalCode, setCaregiverPostalCode] = useState("");
   const [caregiverEmergencyContact, setCaregiverEmergencyContact] =
     useState("");
   const [caregiverEmergencyName, setCaregiverEmergencyName] = useState("");
+  const [caregiverEmergencyRelation, setCaregiverEmergencyRelation] = useState("");
   const [caregiverExperience, setCaregiverExperience] = useState("");
   const [caregiverCertificate, setCaregiverCertificate] = useState("");
   const [caregiverSalary, setCaregiverSalary] = useState("");
+  const [caregiverSalaryType, setCaregiverSalaryType] = useState("monthly");
+  const [caregiverEmploymentType, setCaregiverEmploymentType] = useState("full-time");
   const [caregiverWorkSchedule, setCaregiverWorkSchedule] = useState("");
+  const [caregiverContractStartDate, setCaregiverContractStartDate] = useState("");
+  const [caregiverContractEndDate, setCaregiverContractEndDate] = useState("");
+  const [caregiverWorkDays, setCaregiverWorkDays] = useState<string[]>([]);
+  const [caregiverWorkTimeStart, setCaregiverWorkTimeStart] = useState("");
+  const [caregiverWorkTimeEnd, setCaregiverWorkTimeEnd] = useState("");
   const [caregiverIdCardImage, setCaregiverIdCardImage] = useState("");
   const [caregiverCertificateImage, setCaregiverCertificateImage] =
     useState("");
@@ -577,7 +612,7 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
     });
   };
 
-  const handleAddCaregiver = () => {
+  const handleAddCaregiver = async () => {
     if (
       !caregiverName ||
       !caregiverPhone ||
@@ -593,82 +628,187 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
       return;
     }
 
-    if (editingCaregiver) {
-      // Update existing caregiver
-      setCaregivers(
-        caregivers.map((c) =>
-          c.id === editingCaregiver.id
-            ? {
-                ...c,
-                name: caregiverName,
-                phone: caregiverPhone,
-                email: caregiverEmail,
-                idCard: caregiverIdCard,
-                address: caregiverAddress,
-                emergencyContact: caregiverEmergencyContact,
-                emergencyName: caregiverEmergencyName,
-                experience: caregiverExperience,
-                certificate: caregiverCertificate,
-                salary: caregiverSalary,
-                workSchedule: caregiverWorkSchedule,
-                idCardImage: caregiverIdCardImage,
-                certificateImage: caregiverCertificateImage,
-              }
-            : c
-        )
-      );
-      showAlertMessage(
-        "แก้ไขสำเร็จ",
-        `แก้ไขข้อมูล ${caregiverName} เรียบร้อย`,
-        "success"
-      );
+    // Validate contract-specific fields
+    if (caregiverEmploymentType === "contract") {
+      if (!caregiverContractStartDate || !caregiverContractEndDate) {
+        showAlertMessage(
+          "ข้อมูลไม่ครบ",
+          "กรุณาระบุวันที่เริ่มงานและวันที่สิ้นสุดสำหรับสัญญาจ้าง",
+          "error"
+        );
+        return;
+      }
     } else {
-      // Add new caregiver
-      const pairingCode = generatePairingCode(caregiverName);
-      const newCaregiver: Caregiver = {
-        id: Date.now().toString(),
-        name: caregiverName,
-        phone: caregiverPhone,
-        email: caregiverEmail,
-        verified: false,
-        startDate: new Date().toISOString().split("T")[0],
-        pairingCode: pairingCode,
-        idCard: caregiverIdCard,
-        address: caregiverAddress,
-        emergencyContact: caregiverEmergencyContact,
-        emergencyName: caregiverEmergencyName,
-        experience: caregiverExperience,
-        certificate: caregiverCertificate,
-        salary: caregiverSalary,
-        workSchedule: caregiverWorkSchedule,
-        idCardImage: caregiverIdCardImage,
-        certificateImage: caregiverCertificateImage,
-      };
-
-      setCaregivers([...caregivers, newCaregiver]);
-      showAlertMessage(
-        "เพิ่มสำเร็จ",
-        `เพิ่มผู้ดูแล ${caregiverName} เรียบร้อย\nรหัสจับคู่: ${pairingCode}`,
-        "success"
-      );
+      if (!caregiverContractStartDate) {
+        showAlertMessage(
+          "ข้อมูลไม่ครบ",
+          "กรุณาระบุวันที่เริ่มงาน",
+          "error"
+        );
+        return;
+      }
     }
 
-    // Reset form
-    setCaregiverName("");
-    setCaregiverPhone("");
-    setCaregiverEmail("");
-    setCaregiverIdCard("");
-    setCaregiverAddress("");
-    setCaregiverEmergencyContact("");
-    setCaregiverEmergencyName("");
-    setCaregiverExperience("");
-    setCaregiverCertificate("");
-    setCaregiverSalary("");
-    setCaregiverWorkSchedule("");
-    setCaregiverIdCardImage("");
-    setCaregiverCertificateImage("");
-    setEditingCaregiver(null);
-    setShowCaregiverForm(false);
+    if (caregiverWorkDays.length === 0) {
+      showAlertMessage(
+        "ข้อมูลไม่ครบ",
+        "กรุณาเลือกวันทำงาน",
+        "error"
+      );
+      return;
+    }
+
+    if (!caregiverWorkTimeStart || !caregiverWorkTimeEnd) {
+      showAlertMessage(
+        "ข้อมูลไม่ครบ",
+        "กรุณาระบุเวลาทำงาน",
+        "error"
+      );
+      return;
+    }
+
+    // Build workSchedule string
+    const daysMap: { [key: string]: string } = {
+      mon: "จ",
+      tue: "อ",
+      wed: "พ",
+      thu: "พฤ",
+      fri: "ศ",
+      sat: "ส",
+      sun: "อา"
+    };
+    const selectedDaysText = caregiverWorkDays.map(d => daysMap[d]).join(", ");
+    const workScheduleText = `${selectedDaysText} ${caregiverWorkTimeStart}-${caregiverWorkTimeEnd}`;
+
+    try {
+      if (editingCaregiver) {
+        // Update existing caregiver
+        const res = await fetch(`${BASE_URL}/family/caregivers/${editingCaregiver.id}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name: caregiverName,
+            phone: caregiverPhone,
+            email: caregiverEmail,
+            gender: caregiverGender || null,
+            dateOfBirth: caregiverDateOfBirth || null,
+            idCard: caregiverIdCard,
+            address: caregiverAddress,
+            subDistrict: caregiverSubDistrict || null,
+            district: caregiverDistrict || null,
+            province: caregiverProvince || null,
+            postalCode: caregiverPostalCode || null,
+            emergencyContact: caregiverEmergencyContact,
+            emergencyName: caregiverEmergencyName,
+            emergencyRelation: caregiverEmergencyRelation || null,
+            experience: caregiverExperience,
+            certificate: caregiverCertificate,
+            salary: caregiverSalary, // ส่งเป็น string เพื่อรักษา precision
+            salaryType: caregiverSalaryType,
+            employmentType: caregiverEmploymentType,
+            workSchedule: workScheduleText,
+            contractStartDate: caregiverContractStartDate || null,
+            contractEndDate: caregiverEmploymentType === "contract" ? caregiverContractEndDate : null,
+            idCardImage: caregiverIdCardImage || null,
+            certificateImage: caregiverCertificateImage || null,
+          }),
+        });
+        const data = await res.json();
+        if (res.ok && data.id) {
+          showAlertMessage(
+            "แก้ไขสำเร็จ",
+            `แก้ไขข้อมูล ${caregiverName} เรียบร้อย`,
+            "success"
+          );
+          setLoadingCaregivers(true);
+          setTimeout(() => {
+            fetch(`${BASE_URL}/family/caregivers?elderId=${selectedElder.id}`, {
+              headers: { Authorization: `Bearer ${token}` },
+            })
+              .then((res) => res.json())
+              .then((data) => {
+                setCaregivers(Array.isArray(data) ? data : []);
+                setLoadingCaregivers(false);
+              });
+          }, 300);
+        } else {
+          showAlertMessage(
+            "แก้ไขล้มเหลว",
+            data.message || "เกิดข้อผิดพลาดในการแก้ไขข้อมูล",
+            "error"
+          );
+        }
+      } else {
+        // Add new caregiver
+        const res = await fetch(`${BASE_URL}/family/caregivers`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name: caregiverName,
+            phone: caregiverPhone,
+            email: caregiverEmail,
+            gender: caregiverGender || null,
+            dateOfBirth: caregiverDateOfBirth || null,
+            idCard: caregiverIdCard,
+            address: caregiverAddress,
+            subDistrict: caregiverSubDistrict || null,
+            district: caregiverDistrict || null,
+            province: caregiverProvince || null,
+            postalCode: caregiverPostalCode || null,
+            emergencyContact: caregiverEmergencyContact,
+            emergencyName: caregiverEmergencyName,
+            emergencyRelation: caregiverEmergencyRelation || null,
+            experience: caregiverExperience,
+            certificate: caregiverCertificate,
+            salary: caregiverSalary, // ส่งเป็น string เพื่อรักษา precision
+            salaryType: caregiverSalaryType,
+            employmentType: caregiverEmploymentType,
+            workSchedule: workScheduleText,
+            contractStartDate: caregiverContractStartDate || null,
+            contractEndDate: caregiverEmploymentType === "contract" ? caregiverContractEndDate : null,
+            idCardImage: caregiverIdCardImage || null,
+            certificateImage: caregiverCertificateImage || null,
+            elderId: selectedElder.id,
+          }),
+        });
+        const data = await res.json();
+        if (res.ok && data.id) {
+          showAlertMessage(
+            "เพิ่มสำเร็จ",
+            `เพิ่มผู้ดูแล ${caregiverName} เรียบร้อย\nรหัสจับคู่: ${data.pairingCode}`,
+            "success"
+          );
+          setLoadingCaregivers(true);
+          setTimeout(() => {
+            fetch(`${BASE_URL}/family/caregivers?elderId=${selectedElder.id}`, {
+              headers: { Authorization: `Bearer ${token}` },
+            })
+              .then((res) => res.json())
+              .then((data) => {
+                setCaregivers(Array.isArray(data) ? data : []);
+                setLoadingCaregivers(false);
+              });
+          }, 300);
+        } else {
+          showAlertMessage(
+            "เพิ่มล้มเหลว",
+            data.message || "เกิดข้อผิดพลาดในการเพิ่มข้อมูล",
+            "error"
+          );
+        }
+      }
+
+      // Reset form
+      handleCancelCaregiverForm();
+    } catch {
+      showAlertMessage("ข้อผิดพลาด", "เกิดข้อผิดพลาดในการบันทึกข้อมูล", "error");
+    }
   };
 
   const handleEditCaregiver = (caregiver: Caregiver) => {
@@ -676,16 +816,63 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
     setCaregiverName(caregiver.name);
     setCaregiverPhone(caregiver.phone);
     setCaregiverEmail(caregiver.email);
+    setCaregiverGender(caregiver.gender || "");
+    
+    // แปลง DateTime เป็น YYYY-MM-DD สำหรับ input type="date"
+    const formatDateForInput = (dateString?: string) => {
+      if (!dateString) return "";
+      const date = new Date(dateString);
+      return date.toISOString().split('T')[0];
+    };
+    
+    setCaregiverDateOfBirth(formatDateForInput(caregiver.dateOfBirth));
     setCaregiverIdCard(caregiver.idCard);
     setCaregiverAddress(caregiver.address);
+    setCaregiverSubDistrict(caregiver.subDistrict || "");
+    setCaregiverDistrict(caregiver.district || "");
+    setCaregiverProvince(caregiver.province || "");
+    setCaregiverPostalCode(caregiver.postalCode || "");
     setCaregiverEmergencyContact(caregiver.emergencyContact);
     setCaregiverEmergencyName(caregiver.emergencyName);
+    setCaregiverEmergencyRelation(caregiver.emergencyRelation || "");
     setCaregiverExperience(caregiver.experience);
     setCaregiverCertificate(caregiver.certificate);
     setCaregiverSalary(caregiver.salary);
-    setCaregiverWorkSchedule(caregiver.workSchedule);
+    setCaregiverSalaryType(caregiver.salaryType);
+    setCaregiverEmploymentType(caregiver.employmentType);
+    setCaregiverContractStartDate(formatDateForInput(caregiver.contractStartDate));
+    setCaregiverContractEndDate(formatDateForInput(caregiver.contractEndDate));
     setCaregiverIdCardImage(caregiver.idCardImage || "");
     setCaregiverCertificateImage(caregiver.certificateImage || "");
+    
+    // Parse workSchedule to extract days and time
+    if (caregiver.workSchedule) {
+      // Format: "จ, อ, พ 08:00-17:00"
+      const parts = caregiver.workSchedule.split(" ");
+      if (parts.length >= 2) {
+        const daysText = parts.slice(0, -1).join(" ");
+        const timeRange = parts[parts.length - 1];
+        
+        // Map Thai days back to English
+        const reverseDaysMap: { [key: string]: string } = {
+          "จ": "mon", "อ": "tue", "พ": "wed", "พฤ": "thu",
+          "ศ": "fri", "ส": "sat", "อา": "sun"
+        };
+        const daysList = daysText.split(",").map(d => d.trim()).map(d => reverseDaysMap[d]).filter(Boolean);
+        setCaregiverWorkDays(daysList);
+        
+        if (timeRange.includes("-")) {
+          const [start, end] = timeRange.split("-");
+          setCaregiverWorkTimeStart(start);
+          setCaregiverWorkTimeEnd(end);
+        }
+      }
+    } else {
+      setCaregiverWorkDays([]);
+      setCaregiverWorkTimeStart("");
+      setCaregiverWorkTimeEnd("");
+    }
+    
     setShowCaregiverForm(true);
   };
 
@@ -693,14 +880,28 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
     setCaregiverName("");
     setCaregiverPhone("");
     setCaregiverEmail("");
+    setCaregiverGender("");
+    setCaregiverDateOfBirth("");
     setCaregiverIdCard("");
     setCaregiverAddress("");
+    setCaregiverSubDistrict("");
+    setCaregiverDistrict("");
+    setCaregiverProvince("");
+    setCaregiverPostalCode("");
     setCaregiverEmergencyContact("");
     setCaregiverEmergencyName("");
+    setCaregiverEmergencyRelation("");
     setCaregiverExperience("");
     setCaregiverCertificate("");
     setCaregiverSalary("");
+    setCaregiverSalaryType("monthly");
+    setCaregiverEmploymentType("full-time");
     setCaregiverWorkSchedule("");
+    setCaregiverContractStartDate("");
+    setCaregiverContractEndDate("");
+    setCaregiverWorkDays([]);
+    setCaregiverWorkTimeStart("");
+    setCaregiverWorkTimeEnd("");
     setCaregiverIdCardImage("");
     setCaregiverCertificateImage("");
     setEditingCaregiver(null);
@@ -708,8 +909,72 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
   };
 
   const handleDeleteCaregiver = (id: string) => {
-    setCaregivers(caregivers.filter((c) => c.id !== id));
-    showAlertMessage("ลบแล้ว", "ลบผู้ดูแลเรียบร้อย", "info");
+    setConfirmDeleteCaregiverId(id);
+  };
+
+  const handleDeleteCaregiverConfirmed = async (id: string) => {
+    try {
+      const res = await fetch(`${BASE_URL}/family/caregivers/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showAlertMessage("ลบแล้ว", "ลบผู้ดูแลเรียบร้อย", "info");
+        setLoadingCaregivers(true);
+        setTimeout(() => {
+          fetch(`${BASE_URL}/family/caregivers?elderId=${selectedElder.id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+            .then((res) => res.json())
+            .then((data) => {
+              setCaregivers(Array.isArray(data) ? data : []);
+              setLoadingCaregivers(false);
+            });
+        }, 300);
+      } else {
+        showAlertMessage(
+          "ลบล้มเหลว",
+          data.message || "เกิดข้อผิดพลาดในการลบข้อมูล",
+          "error"
+        );
+      }
+    } catch {
+      showAlertMessage("ข้อผิดพลาด", "เกิดข้อผิดพลาดในการลบข้อมูล", "error");
+    }
+  };
+
+  // ยืนยันตัวตนผู้ดูแล
+  const handleVerifyCaregiver = async (id: string, name: string) => {
+    try {
+      const res = await fetch(`${BASE_URL}/family/caregivers/${id}/verify`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showAlertMessage("ยืนยันสำเร็จ", `ยืนยันตัวตน ${name} เรียบร้อย`, "success");
+        setLoadingCaregivers(true);
+        setTimeout(() => {
+          fetch(`${BASE_URL}/family/caregivers?elderId=${selectedElder.id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+            .then((res) => res.json())
+            .then((data) => {
+              setCaregivers(Array.isArray(data) ? data : []);
+              setLoadingCaregivers(false);
+            });
+        }, 300);
+      } else {
+        showAlertMessage(
+          "ยืนยันล้มเหลว",
+          data.message || "เกิดข้อผิดพลาดในการยืนยันตัวตน",
+          "error"
+        );
+      }
+    } catch {
+      showAlertMessage("ข้อผิดพลาด", "เกิดข้อผิดพลาดในการยืนยันตัวตน", "error");
+    }
   };
 
   // เพิ่มบัญชีผ่าน API
@@ -1297,6 +1562,17 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   };
 
+  // Helper function to format date for display
+  const formatDateDisplay = (dateString?: string | null) => {
+    if (!dateString) return "-";
+    const date = new Date(dateString);
+    return date.toLocaleDateString('th-TH', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
   const totalBills = bills.reduce((sum, b) => sum + Number(b.amount), 0);
   const unpaidBills = bills
     .filter((b) => !b.isPaid)
@@ -1507,6 +1783,23 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                         value={caregiverName}
                         onChange={(e) => setCaregiverName(e.target.value)}
                       />
+                      <select
+                        className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800"
+                        value={caregiverGender}
+                        onChange={(e) => setCaregiverGender(e.target.value)}
+                      >
+                        <option value="">-- เลือกเพศ --</option>
+                        <option value="male">ชาย</option>
+                        <option value="female">หญิง</option>
+                        <option value="other">อื่นๆ</option>
+                      </select>
+                      <input
+                        type="date"
+                        placeholder="วันเกิด"
+                        className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800"
+                        value={caregiverDateOfBirth}
+                        onChange={(e) => setCaregiverDateOfBirth(e.target.value)}
+                      />
                       <input
                         type="text"
                         placeholder="เลขบัตรประชาชน 13 หลัก *"
@@ -1517,6 +1810,15 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                           setCaregiverIdCard(e.target.value.replace(/\D/g, ""))
                         }
                       />
+                    </div>
+                  </div>
+
+                  {/* ที่อยู่ */}
+                  <div className="border-b pb-4">
+                    <h4 className="text-sm font-bold text-purple-700 mb-3 flex items-center gap-2">
+                      <MapPin size={16} /> ที่อยู่
+                    </h4>
+                    <div className="space-y-3">
                       <textarea
                         placeholder="ที่อยู่ *"
                         rows={3}
@@ -1524,6 +1826,39 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                         value={caregiverAddress}
                         onChange={(e) => setCaregiverAddress(e.target.value)}
                       />
+                      <div className="grid grid-cols-2 gap-3">
+                        <input
+                          type="text"
+                          placeholder="ตำบล/แขวง"
+                          className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800"
+                          value={caregiverSubDistrict}
+                          onChange={(e) => setCaregiverSubDistrict(e.target.value)}
+                        />
+                        <input
+                          type="text"
+                          placeholder="อำเภอ/เขต"
+                          className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800"
+                          value={caregiverDistrict}
+                          onChange={(e) => setCaregiverDistrict(e.target.value)}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <input
+                          type="text"
+                          placeholder="จังหวัด"
+                          className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800"
+                          value={caregiverProvince}
+                          onChange={(e) => setCaregiverProvince(e.target.value)}
+                        />
+                        <input
+                          type="text"
+                          placeholder="รหัสไปรษณีย์"
+                          maxLength={5}
+                          className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800"
+                          value={caregiverPostalCode}
+                          onChange={(e) => setCaregiverPostalCode(e.target.value.replace(/\D/g, ""))}
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -1558,11 +1893,20 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                     <div className="space-y-3">
                       <input
                         type="text"
-                        placeholder="ชื่อผู้ติดต่อฉุกเฉิน (เช่น คุณสมชาย - พี่ชาย)"
+                        placeholder="ชื่อผู้ติดต่อฉุกเฉิน (เช่น คุณสมชาย)"
                         className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800"
                         value={caregiverEmergencyName}
                         onChange={(e) =>
                           setCaregiverEmergencyName(e.target.value)
+                        }
+                      />
+                      <input
+                        type="text"
+                        placeholder="ความสัมพันธ์ (เช่น พี่ชาย/น้องสาว/เพื่อน)"
+                        className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800"
+                        value={caregiverEmergencyRelation}
+                        onChange={(e) =>
+                          setCaregiverEmergencyRelation(e.target.value)
                         }
                       />
                       <input
@@ -1583,6 +1927,97 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                       <Activity size={16} /> ข้อมูลการทำงาน
                     </h4>
                     <div className="space-y-3">
+                      <select
+                        className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800"
+                        value={caregiverEmploymentType}
+                        onChange={(e) => setCaregiverEmploymentType(e.target.value)}
+                      >
+                        <option value="full-time">ประจำ (Full-time)</option>
+                        <option value="part-time">พาร์ทไทม์ (Part-time)</option>
+                        <option value="contract">สัญญาจ้าง (Contract)</option>
+                      </select>
+                      
+                      {/* วันที่เริ่มทำงาน (ทุกประเภท) */}
+                      <div>
+                        <label className="block text-sm text-gray-600 mb-1">วันที่เริ่มงาน *</label>
+                        <input
+                          type="date"
+                          className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800"
+                          value={caregiverContractStartDate}
+                          onChange={(e) => setCaregiverContractStartDate(e.target.value)}
+                        />
+                      </div>
+                      
+                      {/* วันที่สิ้นสุด (เฉพาะสัญญาจ้าง) */}
+                      {caregiverEmploymentType === "contract" && (
+                        <div>
+                          <label className="block text-sm text-gray-600 mb-1">วันที่สิ้นสุดสัญญา *</label>
+                          <input
+                            type="date"
+                            className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800"
+                            value={caregiverContractEndDate}
+                            onChange={(e) => setCaregiverContractEndDate(e.target.value)}
+                          />
+                        </div>
+                      )}
+                      
+                      {/* เลือกวันทำงาน */}
+                      <div>
+                        <label className="block text-sm text-gray-600 mb-2">เลือกวันทำงาน *</label>
+                        <div className="grid grid-cols-4 gap-2">
+                          {[
+                            { key: "mon", label: "จ" },
+                            { key: "tue", label: "อ" },
+                            { key: "wed", label: "พ" },
+                            { key: "thu", label: "พฤ" },
+                            { key: "fri", label: "ศ" },
+                            { key: "sat", label: "ส" },
+                            { key: "sun", label: "อา" },
+                          ].map((day) => (
+                            <button
+                              key={day.key}
+                              type="button"
+                              onClick={() => {
+                                if (caregiverWorkDays.includes(day.key)) {
+                                  setCaregiverWorkDays(caregiverWorkDays.filter(d => d !== day.key));
+                                } else {
+                                  setCaregiverWorkDays([...caregiverWorkDays, day.key]);
+                                }
+                              }}
+                              className={`p-2 rounded-lg border-2 transition-colors ${
+                                caregiverWorkDays.includes(day.key)
+                                  ? "bg-purple-600 border-purple-600 text-white"
+                                  : "bg-gray-50 border-gray-200 text-gray-700 hover:border-purple-300"
+                              }`}
+                            >
+                              {day.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      {/* เวลาทำงาน */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-sm text-gray-600 mb-1">เวลาเริ่ม *</label>
+                          <input
+                            type="time"
+                            className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800"
+                            value={caregiverWorkTimeStart}
+                            onChange={(e) => setCaregiverWorkTimeStart(e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm text-gray-600 mb-1">เวลาสิ้นสุด *</label>
+                          <input
+                            type="time"
+                            className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800"
+                            value={caregiverWorkTimeEnd}
+                            onChange={(e) => setCaregiverWorkTimeEnd(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      
                       <input
                         type="text"
                         placeholder="ประสบการณ์ (ปี)"
@@ -1599,18 +2034,27 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                           setCaregiverCertificate(e.target.value)
                         }
                       />
-                      <input
-                        type="text"
-                        placeholder="เวลาทำงาน (เช่น จันทร์-ศุกร์ 8:00-17:00)"
+                    </div>
+                  </div>
+
+                  {/* เงินเดือน */}
+                  <div className="border-b pb-4">
+                    <h4 className="text-sm font-bold text-purple-700 mb-3 flex items-center gap-2">
+                      <DollarSign size={16} /> เงินเดือน
+                    </h4>
+                    <div className="space-y-3">
+                      <select
                         className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800"
-                        value={caregiverWorkSchedule}
-                        onChange={(e) =>
-                          setCaregiverWorkSchedule(e.target.value)
-                        }
-                      />
+                        value={caregiverSalaryType}
+                        onChange={(e) => setCaregiverSalaryType(e.target.value)}
+                      >
+                        <option value="monthly">รายเดือน (Monthly)</option>
+                        <option value="daily">รายวัน (Daily)</option>
+                        <option value="hourly">รายชั่วโมง (Hourly)</option>
+                      </select>
                       <input
                         type="number"
-                        placeholder="เงินเดือน (บาท)"
+                        placeholder="จำนวนเงิน (บาท)"
                         className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800"
                         value={caregiverSalary}
                         onChange={(e) => setCaregiverSalary(e.target.value)}
@@ -1677,7 +2121,16 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
 
             {/* Caregiver List */}
             <div className="space-y-4">
-              {caregivers.map((caregiver) => (
+              {loadingCaregivers ? (
+                <div className="text-center py-8 text-gray-400">
+                  กำลังโหลด...
+                </div>
+              ) : caregivers.length === 0 ? (
+                <div className="text-center py-8 text-gray-400">
+                  ยังไม่มีผู้ดูแล
+                </div>
+              ) : (
+                caregivers.map((caregiver) => (
                 <div
                   key={caregiver.id}
                   className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100"
@@ -1697,9 +2150,18 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                               <CheckCircle2 size={12} /> ยืนยันแล้ว
                             </span>
                           ) : (
-                            <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full font-bold">
-                              รอยืนยัน
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full font-bold">
+                                รอยืนยัน
+                              </span>
+                              <button
+                                onClick={() => handleVerifyCaregiver(caregiver.id, caregiver.name)}
+                                className="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-full font-bold transition-colors flex items-center gap-1"
+                                title="ยืนยันตัวตนผู้ดูแล"
+                              >
+                                <CheckCircle2 size={12} /> ยืนยัน
+                              </button>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -1740,7 +2202,7 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                     <div className="flex items-center gap-2 text-gray-600">
                       <Clock size={14} className="shrink-0" />
                       <span className="truncate">
-                        เริ่ม: {caregiver.startDate}
+                        เริ่ม: {formatDateDisplay(caregiver.startDate)}
                       </span>
                     </div>
                   </div>
@@ -1810,6 +2272,42 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                         </div>
                       </div>
 
+                      {(caregiver.dateOfBirth || caregiver.gender) && (
+                        <div className="grid grid-cols-2 gap-2">
+                          {caregiver.dateOfBirth && (
+                            <div className="bg-gray-50 p-3 rounded-xl">
+                              <p className="text-xs text-gray-500 font-medium mb-1">
+                                วันเกิด
+                              </p>
+                              <p className="text-gray-700 font-bold text-xs">
+                                {formatDateDisplay(caregiver.dateOfBirth)}
+                              </p>
+                            </div>
+                          )}
+                          {caregiver.gender && (
+                            <div className="bg-gray-50 p-3 rounded-xl">
+                              <p className="text-xs text-gray-500 font-medium mb-1">
+                                เพศ
+                              </p>
+                              <p className="text-gray-700 font-bold">
+                                {caregiver.gender === 'male' ? 'ชาย' : caregiver.gender === 'female' ? 'หญิง' : 'อื่นๆ'}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {(caregiver.subDistrict || caregiver.district || caregiver.province || caregiver.postalCode) && (
+                        <div className="bg-gray-50 p-3 rounded-xl">
+                          <p className="text-xs text-gray-500 font-medium mb-1">
+                            ที่อยู่เพิ่มเติม
+                          </p>
+                          <p className="text-gray-700 text-xs">
+                            {[caregiver.subDistrict, caregiver.district, caregiver.province, caregiver.postalCode].filter(Boolean).join(', ')}
+                          </p>
+                        </div>
+                      )}
+
                       <div className="bg-gray-50 p-3 rounded-xl">
                         <p className="text-xs text-gray-500 font-medium mb-1">
                           วุฒิการศึกษา
@@ -1818,12 +2316,60 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                       </div>
 
                       <div className="grid grid-cols-2 gap-2">
+                        <div className="bg-green-50 p-3 rounded-xl">
+                          <p className="text-xs text-green-600 font-medium mb-1">
+                            ประเภทการจ้าง
+                          </p>
+                          <p className="text-green-900 font-bold text-xs">
+                            {caregiver.employmentType === 'full-time' ? 'ประจำ' : 
+                             caregiver.employmentType === 'part-time' ? 'พาร์ทไทม์' : 
+                             'สัญญาจ้าง'}
+                          </p>
+                        </div>
+                        <div className="bg-green-50 p-3 rounded-xl">
+                          <p className="text-xs text-green-600 font-medium mb-1">
+                            ประเภทเงินเดือน
+                          </p>
+                          <p className="text-green-900 font-bold text-xs">
+                            {caregiver.salaryType === 'monthly' ? 'รายเดือน' : 
+                             caregiver.salaryType === 'daily' ? 'รายวัน' : 
+                             'รายชั่วโมง'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {(caregiver.contractStartDate || caregiver.contractEndDate) && (
+                        <div className="grid grid-cols-2 gap-2">
+                          {caregiver.contractStartDate && (
+                            <div className="bg-orange-50 p-3 rounded-xl">
+                              <p className="text-xs text-orange-600 font-medium mb-1">
+                                วันที่เริ่มงาน
+                              </p>
+                              <p className="text-orange-900 font-bold text-xs">
+                                {formatDateDisplay(caregiver.contractStartDate)}
+                              </p>
+                            </div>
+                          )}
+                          {caregiver.contractEndDate && (
+                            <div className="bg-orange-50 p-3 rounded-xl">
+                              <p className="text-xs text-orange-600 font-medium mb-1">
+                                วันที่สิ้นสุดสัญญา
+                              </p>
+                              <p className="text-orange-900 font-bold text-xs">
+                                {formatDateDisplay(caregiver.contractEndDate)}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-2 gap-2">
                         <div className="bg-blue-50 p-3 rounded-xl">
                           <p className="text-xs text-blue-600 font-medium mb-1">
                             เงินเดือน
                           </p>
                           <p className="text-blue-900 font-bold">
-                            {parseInt(caregiver.salary).toLocaleString()} บาท
+                            {parseFloat(caregiver.salary).toLocaleString()} บาท
                           </p>
                         </div>
                         <div className="bg-purple-50 p-3 rounded-xl">
@@ -1869,7 +2415,8 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                     </div>
                   </details>
                 </div>
-              ))}
+              ))
+              )}
             </div>
           </div>
         )}
@@ -3201,6 +3748,34 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
               <button
                 className="flex-1 py-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-700 transition-colors"
                 onClick={() => handleDeleteBillConfirmed(confirmDeleteBillId)}
+              >
+                ลบ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Delete Caregiver Dialog */}
+      {confirmDeleteCaregiverId && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-xl p-8 max-w-sm w-full">
+            <h3 className="text-lg font-bold mb-4 text-gray-800">
+              ยืนยันการลบผู้ดูแล
+            </h3>
+            <p className="mb-6 text-gray-600">
+              คุณต้องการลบผู้ดูแลนี้จริงหรือไม่? การลบจะไม่สามารถย้อนกลับได้
+            </p>
+            <div className="flex gap-3">
+              <button
+                className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 font-bold hover:bg-gray-200 transition-colors"
+                onClick={() => setConfirmDeleteCaregiverId(null)}
+              >
+                ยกเลิก
+              </button>
+              <button
+                className="flex-1 py-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-700 transition-colors"
+                onClick={() => handleDeleteCaregiverConfirmed(confirmDeleteCaregiverId)}
               >
                 ลบ
               </button>
