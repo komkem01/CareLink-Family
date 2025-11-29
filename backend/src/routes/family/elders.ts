@@ -81,6 +81,23 @@ router.post('/', authenticateToken, requireFamily, async (req: Request, res: Res
     if (existing) {
       return res.status(400).json({ error: 'Duplicate elder name', message: 'มีผู้สูงอายุชื่อนี้อยู่แล้ว กรุณาใช้ชื่ออื่น' });
     }
+
+    // Generate unique 6-digit pairing code
+    const generatePairingCode = () => {
+      return Math.floor(100000 + Math.random() * 900000).toString();
+    };
+
+    let pairingCode = generatePairingCode();
+    
+    // Ensure pairingCode is unique
+    while (true) {
+      const existingCode = await prisma.elder.findUnique({
+        where: { pairingCode }
+      });
+      if (!existingCode) break;
+      pairingCode = generatePairingCode();
+    }
+
     const elder = await prisma.elder.create({
       data: {
         name,
@@ -94,7 +111,8 @@ router.post('/', authenticateToken, requireFamily, async (req: Request, res: Res
         chronicDiseases: chronicDiseases || [],
         phone,
         address,
-        familyUserId: familyUserId
+        familyUserId: familyUserId,
+        pairingCode, // Add generated pairing code
       }
     });
     res.status(201).json(elder);

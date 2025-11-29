@@ -41,7 +41,7 @@ router.get('/', authenticateToken, requireFamily, async (req: Request, res: Resp
 // POST /api/family/activities
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { title, description, time, date, elderId } = req.body;
+    const { title, description, time, date, elderId, caregiverId } = req.body;
 
     const activity = await prisma.activity.create({
       data: {

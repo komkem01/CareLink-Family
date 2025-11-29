@@ -150,6 +150,9 @@ model Elder {
   familyUserId String
   familyUser   FamilyUser @relation(fields: [familyUserId], references: [id], onDelete: Cascade)
 
+  // Pairing System
+  pairingCode String @unique // 6-digit code for pairing with caregivers
+
   // Status
   isActive Boolean @default(true)
 
