@@ -8,7 +8,7 @@ const router = Router();
 router.get('/', authenticateToken, requireFamily, async (req: Request, res: Response) => {
   try {
     const userId = req.userId as string;
-    const { elderId, isPaid, date } = req.query;
+    const { elderId, isPaid } = req.query;
     const where: any = {};
     if (elderId) {
       where.elderId = String(elderId);
@@ -17,21 +17,6 @@ router.get('/', authenticateToken, requireFamily, async (req: Request, res: Resp
       where.elder = { familyUserId: userId };
     }
     if (isPaid !== undefined) where.isPaid = isPaid === 'true';
-    
-    // กรองตามวันที่ถ้ามีส่ง date parameter
-    if (date) {
-      const startOfDay = new Date(String(date));
-      startOfDay.setHours(0, 0, 0, 0);
-      
-      const endOfDay = new Date(String(date));
-      endOfDay.setHours(23, 59, 59, 999);
-      
-      where.date = {
-        gte: startOfDay,
-        lte: endOfDay
-      };
-    }
-    
     const bills = await prisma.bill.findMany({
       where,
       include: {

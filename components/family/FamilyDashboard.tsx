@@ -34,7 +34,6 @@ import {
   MapPin,
 } from "lucide-react";
 import CustomAlert from "../CustomAlert";
-import MoodsTab from "./MoodsTab";
 
 interface Elder {
   id: string;
@@ -157,8 +156,7 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
   React.useEffect(() => {
     if (!selectedElder?.id) return;
     setLoadingBills(true);
-    const today = new Date().toISOString().split('T')[0];
-    fetch(`${BASE_URL}/family/bills?elderId=${selectedElder.id}&date=${today}`, {
+    fetch(`${BASE_URL}/family/bills?elderId=${selectedElder.id}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => res.json())
@@ -183,8 +181,7 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
   React.useEffect(() => {
     if (!selectedElder?.id) return;
     setLoadingActivities(true);
-    const today = new Date().toISOString().split('T')[0];
-    fetch(`${BASE_URL}/family/activities?elderId=${selectedElder.id}&date=${today}`, {
+    fetch(`${BASE_URL}/family/activities?elderId=${selectedElder.id}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => res.json())
@@ -241,7 +238,8 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
   }, [selectedElder?.id, BASE_URL, token]);
 
   // ดึง notifications จาก backend
-  const loadNotifications = React.useCallback(() => {
+  React.useEffect(() => {
+    setLoadingNotifications(true);
     fetch(`${BASE_URL}/family/notifications`, {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -255,111 +253,6 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
         setLoadingNotifications(false);
       });
   }, [BASE_URL, token]);
-
-  // โหลด notifications ครั้งแรก
-  React.useEffect(() => {
-    setLoadingNotifications(true);
-    loadNotifications();
-  }, [loadNotifications]);
-
-  // Auto-refresh notifications ทุก 5 วินาที
-  React.useEffect(() => {
-    const interval = setInterval(() => {
-      loadNotifications();
-    }, 5000); // 5000ms = 5 วินาที
-
-    return () => clearInterval(interval);
-  }, [loadNotifications]);
-
-  // Auto-refresh ข้อมูลหลักทุก 5 วินาที (Activities, Bills, Health)
-  React.useEffect(() => {
-    if (!selectedElder?.id) return;
-
-    const refreshData = () => {
-      const today = new Date().toISOString().split('T')[0];
-      
-      // Refresh Activities
-      fetch(`${BASE_URL}/family/activities?elderId=${selectedElder.id}&date=${today}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          setActivities(Array.isArray(data) ? data : []);
-        })
-        .catch(() => {});
-
-      // Refresh Bills
-      fetch(`${BASE_URL}/family/bills?elderId=${selectedElder.id}&date=${today}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          const billsData = Array.isArray(data)
-            ? data.map((bill: any) => ({
-                ...bill,
-                amount: Number(bill.amount)
-              }))
-            : [];
-          setBills(billsData);
-        })
-        .catch(() => {});
-
-      // Refresh Health
-      fetch(`${BASE_URL}/health/latest?elderId=${selectedElder.id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          setLatestHealth(data);
-        })
-        .catch(() => {});
-
-      // Refresh Reports
-      fetch(`${BASE_URL}/family/reports?elderId=${selectedElder.id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          setReports(Array.isArray(data) ? data : []);
-        })
-        .catch(() => {});
-
-      // Refresh Moods (วันปัจจุบัน)
-      fetch(`${BASE_URL}/family/moods?elderId=${selectedElder.id}&date=${today}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          setMoods(Array.isArray(data) ? data : []);
-        })
-        .catch(() => {});
-    };
-
-    const interval = setInterval(refreshData, 5000); // ทุก 5 วินาที
-    return () => clearInterval(interval);
-  }, [selectedElder?.id, BASE_URL, token]);
-
-  // ดึงข้อมูล moods จาก backend
-  React.useEffect(() => {
-    if (!selectedElder?.id) {
-      setMoods([]);
-      return;
-    }
-    setLoadingMoods(true);
-    const today = new Date().toISOString().split('T')[0];
-    fetch(`${BASE_URL}/family/moods?elderId=${selectedElder.id}&date=${today}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        setMoods(Array.isArray(data) ? data : []);
-        setLoadingMoods(false);
-      })
-      .catch(() => {
-        setMoods([]);
-        setLoadingMoods(false);
-      });
-  }, [selectedElder?.id, BASE_URL, token]);
 
   // ดึงข้อมูลสุขภาพล่าสุด
   React.useEffect(() => {
@@ -520,64 +413,6 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
 
   // Health Report Export
   const [showHealthReport, setShowHealthReport] = useState(false);
-
-  // Moods & Notes from Caregiver
-  const [moods, setMoods] = useState<any[]>([]);
-  const [loadingMoods, setLoadingMoods] = useState(false);
-
-  // Health Overview Analysis
-  const [healthOverview, setHealthOverview] = useState<{
-    status: 'good' | 'fair' | 'emergency';
-    message: string;
-  }>({ status: 'good', message: 'สบายดี' });
-
-  // วิเคราะห์สุขภาพภาพรวม
-  React.useEffect(() => {
-    if (!latestHealth && moods.length === 0 && notifications.length === 0) {
-      setHealthOverview({ status: 'good', message: 'ยังไม่มีข้อมูลสุขภาพ' });
-      return;
-    }
-
-    // ตรวจสอบการแจ้งเตือนฉุกเฉิน (SOS)
-    const hasEmergency = notifications.some(n => 
-      n.type === 'sos' && !n.isRead
-    );
-    if (hasEmergency) {
-      setHealthOverview({ status: 'emergency', message: '🚨 ฉุกเฉิน! มีการแจ้งเตือน SOS' });
-      return;
-    }
-
-    // ตรวจสอบความดันโลหิต
-    if (latestHealth?.type === 'blood_pressure' && latestHealth.bloodPressure) {
-      const [sys] = latestHealth.bloodPressure.split('/').map(Number);
-      if (sys > 140) {
-        setHealthOverview({ status: 'fair', message: '⚠️ ความดันสูงกว่าปกติ' });
-        return;
-      }
-    }
-
-    // ตรวจสอบอาการจากผู้ดูแล (observation)
-    if (latestHealth?.type === 'observation' && latestHealth.observation) {
-      const hasSymptoms = latestHealth.observation !== 'ปกติ' && 
-                         latestHealth.observation.length > 0;
-      if (hasSymptoms) {
-        setHealthOverview({ status: 'fair', message: `⚠️ มีอาการ: ${latestHealth.observation}` });
-        return;
-      }
-    }
-
-    // ตรวจสอบอารมณ์ล่าสุด
-    if (moods.length > 0) {
-      const latestMood = moods[0];
-      if (latestMood.mood === 'หงุดหงิด' || latestMood.mood === 'ซึม' || latestMood.mood === 'นอนไม่หลับ') {
-        setHealthOverview({ status: 'fair', message: `😟 ไม่ค่อยสบาย (${latestMood.mood})` });
-        return;
-      }
-    }
-
-    // ถ้าไม่มีปัญหาอะไร
-    setHealthOverview({ status: 'good', message: '✅ สบายดี' });
-  }, [latestHealth, moods, notifications]);
 
   const generateHealthReport = () => {
     const reportData = {
@@ -1261,8 +1096,7 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
 
   // โหลดบัญชีใหม่
   const reloadBills = () => {
-    const today = new Date().toISOString().split('T')[0];
-    fetch(`${BASE_URL}/family/bills?elderId=${selectedElder.id}&date=${today}`, {
+    fetch(`${BASE_URL}/family/bills?elderId=${selectedElder.id}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => res.json())
@@ -1383,36 +1217,24 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
             title: activityTitle,
             description: activityDesc,
             time: activityTime,
-            date: activityDate || new Date().toISOString().split("T")[0],
+            date: new Date().toISOString().split("T")[0],
             elderId: selectedElder.id,
           }),
         });
         const data = await res.json();
-        console.log('📝 Activity creation response:', data);
-        
-        // ตรวจสอบ response - API คืน { activity, tasksCreated, tasks, message }
-        if (res.ok && (data.activity || data.id)) {
+        if (res.ok && data.id) {
           setActivityTitle("");
           setActivityDesc("");
           setActivityTime("");
           setActivityDate("");
           setShowActivityForm(false);
-          
-          const tasksInfo = data.tasksCreated > 0 
-            ? `\n✅ สร้าง ${data.tasksCreated} งานสำหรับผู้ดูแลแล้ว`
-            : '\n⚠️ ยังไม่มีผู้ดูแลที่ verified';
-          
-          showAlertMessage(
-            "เพิ่มสำเร็จ", 
-            `เพิ่มกิจกรรมเรียบร้อย${tasksInfo}`, 
-            "success"
-          );
+          showAlertMessage("เพิ่มสำเร็จ", "เพิ่มกิจกรรมเรียบร้อย", "success");
           setLoadingActivities(true);
           setTimeout(() => reloadActivities(), 300);
         } else {
           showAlertMessage(
             "เพิ่มล้มเหลว",
-            data.message || data.error || "เกิดข้อผิดพลาดในการเพิ่มกิจกรรม",
+            data.message || "เกิดข้อผิดพลาดในการเพิ่มกิจกรรม",
             "error"
           );
         }
@@ -1424,8 +1246,7 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
 
   // โหลดกิจกรรมใหม่
   const reloadActivities = () => {
-    const today = new Date().toISOString().split('T')[0];
-    fetch(`${BASE_URL}/family/activities?elderId=${selectedElder.id}&date=${today}`, {
+    fetch(`${BASE_URL}/family/activities?elderId=${selectedElder.id}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => res.json())
@@ -1905,33 +1726,44 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
               <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
                 <div className="flex items-center gap-2 mb-2">
                   <Heart size={20} className="text-red-500" />
-                  <p className="text-gray-500 text-xs font-medium">สุขภาพภาพรวม</p>
+                  <p className="text-gray-500 text-xs font-medium">สุขภาพ</p>
                 </div>
                 {loadingHealth ? (
                   <div className="animate-pulse">
                     <div className="h-8 bg-gray-200 rounded w-20 mb-2"></div>
                     <div className="h-3 bg-gray-200 rounded w-32"></div>
                   </div>
+                ) : latestHealth ? (
+                  <>
+                    <p className="text-2xl font-bold text-gray-800">
+                      {latestHealth.type === 'blood_pressure' && latestHealth.bloodPressure
+                        ? `${latestHealth.bloodPressure}`
+                        : latestHealth.type === 'blood_sugar' && latestHealth.bloodSugar
+                        ? `${latestHealth.bloodSugar} mg/dL`
+                        : latestHealth.type === 'temperature' && latestHealth.temperature
+                        ? `${latestHealth.temperature}°C`
+                        : latestHealth.type === 'weight' && latestHealth.weight
+                        ? `${latestHealth.weight} kg`
+                        : 'บันทึกแล้ว'}
+                    </p>
+                    <p className="text-xs text-green-600 font-medium mt-1">
+                      {latestHealth.type === 'blood_pressure' ? 'ความดัน' :
+                       latestHealth.type === 'blood_sugar' ? 'น้ำตาล' :
+                       latestHealth.type === 'temperature' ? 'อุณหภูมิ' :
+                       latestHealth.type === 'weight' ? 'น้ำหนัก' : 'สุขภาพ'} •{' '}
+                      {new Date(latestHealth.recordedAt).toLocaleDateString('th-TH', {
+                        day: 'numeric',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </p>
+                  </>
                 ) : (
                   <>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-3 h-3 rounded-full ${
-                        healthOverview.status === 'good' ? 'bg-green-500 animate-pulse' :
-                        healthOverview.status === 'fair' ? 'bg-yellow-500 animate-pulse' :
-                        'bg-red-500 animate-pulse'
-                      }`}></div>
-                      <p className={`text-xl font-bold ${
-                        healthOverview.status === 'good' ? 'text-green-600' :
-                        healthOverview.status === 'fair' ? 'text-yellow-600' :
-                        'text-red-600'
-                      }`}>
-                        {healthOverview.status === 'good' ? 'สบายดี' :
-                         healthOverview.status === 'fair' ? 'ไม่ค่อยสบาย' :
-                         'ฉุกเฉิน'}
-                      </p>
-                    </div>
-                    <p className="text-xs text-gray-600 font-medium mt-1">
-                      {healthOverview.message}
+                    <p className="text-2xl font-bold text-gray-400">-</p>
+                    <p className="text-xs text-gray-400 font-medium mt-1">
+                      ยังไม่มีข้อมูล
                     </p>
                   </>
                 )}
@@ -3562,13 +3394,6 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
             </div>
           </div>
         )}
-
-        {/* MOODS TAB */}
-        {activeTab === "moods" && (
-          <div className="animate-in fade-in duration-300">
-            <MoodsTab moods={moods} loading={loadingMoods} />
-          </div>
-        )}
       </div>
 
       {/* Bottom Navigation */}
@@ -3666,23 +3491,6 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
             />
           </div>
           <span className="text-xs font-bold">ปฏิทิน</span>
-        </button>
-        <button
-          onClick={() => setActiveTab("moods")}
-          className={`flex flex-col items-center p-2 w-full transition-all active:scale-90 ${
-            activeTab === "moods"
-              ? "text-purple-600"
-              : "text-gray-400 hover:text-gray-600"
-          }`}
-        >
-          <div
-            className={`p-1 rounded-xl mb-1 ${
-              activeTab === "moods" ? "bg-purple-50" : ""
-            }`}
-          >
-            <Heart size={26} strokeWidth={activeTab === "moods" ? 2.5 : 2} />
-          </div>
-          <span className="text-xs font-bold">จดอาการ</span>
         </button>
       </div>
 
