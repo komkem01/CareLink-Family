@@ -82,7 +82,7 @@ model Caregiver {
   
   // Pairing System
   pairingCode       String   @unique  // 6-digit code
-  elderId           String?  @unique  // One caregiver per elder currently
+  elderId           String?  // Multiple caregivers can be assigned to one elder
   elder             Elder?   @relation(fields: [elderId], references: [id])
   
   // Contract Information
@@ -156,7 +156,7 @@ model Elder {
   updatedAt     DateTime @updatedAt
 
   // Relations
-  caregiver     Caregiver?
+  caregivers    Caregiver[]  // One elder can have multiple caregivers
   bills         Bill[]
   activities    Activity[]
   appointments  Appointment[]

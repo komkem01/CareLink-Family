@@ -5,19 +5,31 @@ import { authenticateToken, requireFamily } from '../../middleware/auth';
 
 const router = Router();
 
-// GET /api/family/caregivers - ดึงรายชื่อผู้ดูแลทั้งหมด
+// GET /api/family/caregivers - ดึงรายชื่อผู้ดูแลทั้งหมด หรือของผู้สูงอายุคนใดคนหนึ่ง
+// Query params: ?elderId=xxx (optional)
 router.get('/', authenticateToken, requireFamily, async (req: Request, res: Response) => {
   try {
     const familyUserId = req.userId as string;
     if (!familyUserId) {
       return res.status(401).json({ error: 'Missing family user id from token' });
     }
+    
+    const { elderId } = req.query;
+    
+    // Build where clause
+    const whereClause: any = {
+      elder: {
+        familyUserId: familyUserId
+      }
+    };
+    
+    // ถ้ามี elderId ให้กรองเฉพาะผู้ดูแลของคุณยายคนนั้น
+    if (elderId && typeof elderId === 'string') {
+      whereClause.elderId = elderId;
+    }
+    
     const caregivers = await prisma.caregiver.findMany({
-      where: {
-        elder: {
-          familyUserId: familyUserId
-        }
-      },
+      where: whereClause,
       include: {
         elder: {
           select: {
@@ -41,38 +53,60 @@ router.post('/', async (req: Request, res: Response) => {
       name,
       phone,
       email,
-      password,
+      gender,
+      dateOfBirth,
       idCard,
       address,
+      subDistrict,
+      district,
+      province,
+      postalCode,
       emergencyContact,
       emergencyName,
+      emergencyRelation,
       experience,
       certificate,
       salary,
+      salaryType,
+      employmentType,
       workSchedule,
+      contractStartDate,
+      contractEndDate,
+      idCardImage,
+      certificateImage,
       elderId
     } = req.body;
 
     // Generate pairing code (6 ตัว)
     const pairingCode = Math.random().toString(36).substring(2, 8).toUpperCase();
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
     const caregiver = await prisma.caregiver.create({
       data: {
         name,
         phone,
         email,
-        password: hashedPassword,
+        password: "", // ไม่ใช้ password จริง
+        gender,
+        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
         idCard,
         address,
+        subDistrict,
+        district,
+        province,
+        postalCode,
         emergencyContact,
         emergencyName,
+        emergencyRelation,
         experience,
         certificate,
-        salary,
+        salary: salary ? String(salary) : "0", // แปลงเป็น string เพื่อรักษา precision
+        salaryType,
+        employmentType,
         workSchedule,
+        contractStartDate: contractStartDate ? new Date(contractStartDate) : null,
+        contractEndDate: contractEndDate ? new Date(contractEndDate) : null,
+        idCardImage,
+        certificateImage,
         pairingCode,
         elderId
       }
@@ -90,6 +124,21 @@ router.patch('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const updateData = req.body;
+
+    // Convert date strings to Date objects
+    if (updateData.dateOfBirth) {
+      updateData.dateOfBirth = new Date(updateData.dateOfBirth);
+    }
+    if (updateData.contractStartDate) {
+      updateData.contractStartDate = new Date(updateData.contractStartDate);
+    }
+    if (updateData.contractEndDate) {
+      updateData.contractEndDate = new Date(updateData.contractEndDate);
+    }
+    // Convert salary to string to preserve precision
+    if (updateData.salary !== undefined) {
+      updateData.salary = String(updateData.salary);
+    }
 
     const caregiver = await prisma.caregiver.update({
       where: { id },
