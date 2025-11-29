@@ -20,6 +20,7 @@ import caregiverHealthRoutes from './routes/caregiver/health';
 import caregiverMoodRoutes from './routes/caregiver/moods';
 import caregiverExpenseRoutes from './routes/caregiver/expenses';
 import caregiverReportRoutes from './routes/caregiver/reports';
+import caregiverAttendanceRoutes from './routes/caregiver/attendance';
 
 // Shared routes
 import uploadRoutes from './routes/shared/upload';
@@ -99,6 +100,7 @@ app.use('/api/caregiver/health', caregiverHealthRoutes);
 app.use('/api/caregiver/moods', caregiverMoodRoutes);
 app.use('/api/caregiver/expenses', caregiverExpenseRoutes);
 app.use('/api/caregiver/reports', caregiverReportRoutes);
+app.use('/api/caregiver/attendance', caregiverAttendanceRoutes);
 
 // Shared Routes (ใช้ร่วมกัน)
 app.use('/api/upload', uploadRoutes);
