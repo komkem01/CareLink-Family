@@ -111,6 +111,17 @@ interface Appointment {
   reminder: boolean;
 }
 
+interface Attendance {
+  id: string;
+  workDate: string;
+  checkInTime: string | null;
+  checkOutTime: string | null;
+  status: string;
+  hoursWorked: number;
+  overtimeHours: number;
+  isOvertime: boolean;
+}
+
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api";
 
 interface Props {
@@ -205,6 +216,103 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
       });
   }, [selectedElder?.id, BASE_URL, token]);
 
+  // ดึง reports จาก backend
+  React.useEffect(() => {
+    if (!selectedElder?.id) {
+      setReports([]);
+      return;
+    }
+    setLoadingReports(true);
+    fetch(`${BASE_URL}/family/reports?elderId=${selectedElder.id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        setReports(Array.isArray(data) ? data : []);
+        setLoadingReports(false);
+      })
+      .catch(() => {
+        setReports([]);
+        setLoadingReports(false);
+      });
+  }, [selectedElder?.id, BASE_URL, token]);
+
+  // ดึง notifications จาก backend
+  React.useEffect(() => {
+    setLoadingNotifications(true);
+    fetch(`${BASE_URL}/family/notifications`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        setNotifications(Array.isArray(data) ? data : []);
+        setLoadingNotifications(false);
+      })
+      .catch(() => {
+        setNotifications([]);
+        setLoadingNotifications(false);
+      });
+  }, [BASE_URL, token]);
+
+  // ดึงข้อมูลสุขภาพล่าสุด
+  React.useEffect(() => {
+    if (!selectedElder?.id) {
+      setLatestHealth(null);
+      return;
+    }
+    setLoadingHealth(true);
+    fetch(`${BASE_URL}/health/latest?elderId=${selectedElder.id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        setLatestHealth(data);
+        setLoadingHealth(false);
+      })
+      .catch(() => {
+        setLatestHealth(null);
+        setLoadingHealth(false);
+      });
+  }, [selectedElder?.id, BASE_URL, token]);
+
+  // ดึงข้อมูล attendance ของผู้ดูแลทั้งหมด
+  React.useEffect(() => {
+    if (!caregivers.length) {
+      setCaregiverAttendances({});
+      return;
+    }
+    
+    setLoadingAttendances(true);
+    const currentDate = new Date();
+    const month = currentDate.getMonth() + 1;
+    const year = currentDate.getFullYear();
+    
+    // ดึงข้อมูล attendance ของแต่ละผู้ดูแล
+    Promise.all(
+      caregivers.map(async (caregiver) => {
+        try {
+          const res = await fetch(
+            `${BASE_URL}/caregiver/attendance/caregiver/${caregiver.id}?month=${month}&year=${year}`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            }
+          );
+          const data = await res.json();
+          return { caregiverId: caregiver.id, attendances: data.attendances || [] };
+        } catch {
+          return { caregiverId: caregiver.id, attendances: [] };
+        }
+      })
+    ).then((results) => {
+      const attendanceMap: {[key: string]: Attendance[]} = {};
+      results.forEach(({ caregiverId, attendances }) => {
+        attendanceMap[caregiverId] = attendances;
+      });
+      setCaregiverAttendances(attendanceMap);
+      setLoadingAttendances(false);
+    });
+  }, [caregivers, BASE_URL, token]);
+
   type AlertType = "info" | "error" | "success";
   const [alert, setAlert] = useState<{
     isOpen: boolean;
@@ -284,91 +392,24 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
   const [appointmentReminder, setAppointmentReminder] = useState(true);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
-  // Reports modal
+  // Reports
   const [showReportsModal, setShowReportsModal] = useState(false);
-  const [reports] = useState([
-    {
-      id: "1",
-      time: "10:30",
-      date: "2024-11-27",
-      title: "คุณยายอารมณ์ดี",
-      status: "success",
-      details: "รับประทานอาหารเสร็จ พูดคุยเรื่องเก่าๆ อารมณ์ดี",
-    },
-    {
-      id: "2",
-      time: "08:00",
-      date: "2024-11-27",
-      title: "ทานยาเรียบร้อย",
-      status: "success",
-      details: "ทานยา 3 เม็ด พร้อมน้ำอุ่น 1 แก้ว",
-    },
-    {
-      id: "3",
-      time: "07:30",
-      date: "2024-11-27",
-      title: "ความดัน 130/85",
-      status: "warning",
-      details: "ความดันสูงกว่าปกติเล็กน้อย ควรสังเกตอาการ",
-    },
-    {
-      id: "4",
-      time: "22:00",
-      date: "2024-11-26",
-      title: "นอนหลับสนิท",
-      status: "success",
-      details: "นอนเวลา 22:00 น. หลับสนิทตลอดคืน",
-    },
-    {
-      id: "5",
-      time: "18:00",
-      date: "2024-11-26",
-      title: "ออกกำลังกาย",
-      status: "success",
-      details: "เดินในสวน 15 นาที กับคุณมานี",
-    },
-    {
-      id: "6",
-      time: "14:30",
-      date: "2024-11-26",
-      title: "อาการปวดหัวเล็กน้อย",
-      status: "warning",
-      details: "ปวดหัวจากแดด ให้พักผ่อนแล้วดีขึ้น",
-    },
-  ]);
+  const [reports, setReports] = useState<any[]>([]);
+  const [loadingReports, setLoadingReports] = useState(false);
 
   // Notifications
   const [showNotifications, setShowNotifications] = useState(false);
-  const [notifications] = useState([
-    {
-      id: "1",
-      title: "คุณมานีส่งรายงานแล้ว",
-      message: "รายงานประจำวันของคุณยายสมศรี",
-      time: "10 นาทีที่แล้ว",
-      isRead: false,
-    },
-    {
-      id: "2",
-      title: "เตือนจ่ายค่าผู้ดูแล",
-      message: "ค่าผู้ดูแลประจำเดือนพ.ย. ยังไม่ได้จ่าย",
-      time: "1 ชั่วโมงที่แล้ว",
-      isRead: false,
-    },
-    {
-      id: "3",
-      title: "กิจกรรมวันนี้",
-      message: "มี 2 กิจกรรมที่ยังไม่เสร็จ",
-      time: "3 ชั่วโมงที่แล้ว",
-      isRead: true,
-    },
-    {
-      id: "4",
-      title: "ความดันปกติ",
-      message: "วัดความดัน 120/80 mmHg",
-      time: "เมื่อวาน",
-      isRead: true,
-    },
-  ]);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+
+  // Health Status
+  const [latestHealth, setLatestHealth] = useState<any>(null);
+  const [loadingHealth, setLoadingHealth] = useState(false);
+
+  // Caregiver Attendance
+  const [caregiverAttendances, setCaregiverAttendances] = useState<{[key: string]: Attendance[]}>({});
+  const [loadingAttendances, setLoadingAttendances] = useState(false);
+  const [selectedCaregiverForAttendance, setSelectedCaregiverForAttendance] = useState<string | null>(null);
 
   // Health Report Export
   const [showHealthReport, setShowHealthReport] = useState(false);
@@ -706,7 +747,7 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
             emergencyRelation: caregiverEmergencyRelation || null,
             experience: caregiverExperience,
             certificate: caregiverCertificate,
-            salary: caregiverSalary, // ส่งเป็น string เพื่อรักษา precision
+            salary: caregiverSalary ? parseFloat(caregiverSalary) : null, // แปลงเป็น decimal
             salaryType: caregiverSalaryType,
             employmentType: caregiverEmploymentType,
             workSchedule: workScheduleText,
@@ -766,7 +807,7 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
             emergencyRelation: caregiverEmergencyRelation || null,
             experience: caregiverExperience,
             certificate: caregiverCertificate,
-            salary: caregiverSalary, // ส่งเป็น string เพื่อรักษา precision
+            salary: caregiverSalary ? parseFloat(caregiverSalary) : null, // แปลงเป็น decimal
             salaryType: caregiverSalaryType,
             employmentType: caregiverEmploymentType,
             workSchedule: workScheduleText,
@@ -1530,6 +1571,24 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
     );
   };
 
+  // Mark notification as read
+  const markNotificationAsRead = async (id: string) => {
+    try {
+      const res = await fetch(`${BASE_URL}/family/notifications/${id}/read`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        // Update local state
+        setNotifications(
+          notifications.map((n) => (n.id === id ? { ...n, isRead: true } : n))
+        );
+      }
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+    }
+  };
+
   const getAppointmentTypeLabel = (type: string) => {
     const labels = {
       doctor: "นัดหมอ",
@@ -1571,6 +1630,40 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
       month: 'short',
       day: 'numeric'
     });
+  };
+
+  // Helper function to format time
+  const formatTime = (dateTimeString?: string | null) => {
+    if (!dateTimeString) return "-";
+    const date = new Date(dateTimeString);
+    return date.toLocaleTimeString('th-TH', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  // Get today's attendance for a caregiver
+  const getTodayAttendance = (caregiverId: string): Attendance | null => {
+    const attendances = caregiverAttendances[caregiverId] || [];
+    const today = new Date().toISOString().split('T')[0];
+    return attendances.find(att => att.workDate.split('T')[0] === today) || null;
+  };
+
+  // Get attendance status badge
+  const getAttendanceStatusBadge = (status: string) => {
+    const statusConfig: {[key: string]: {label: string, color: string}} = {
+      present: { label: 'มาทำงาน', color: 'bg-green-100 text-green-700 border-green-200' },
+      late: { label: 'มาสาย', color: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
+      absent: { label: 'ขาดงาน', color: 'bg-red-100 text-red-700 border-red-200' },
+      'on-leave': { label: 'ลา', color: 'bg-blue-100 text-blue-700 border-blue-200' },
+      pending: { label: 'ยังไม่เข้างาน', color: 'bg-gray-100 text-gray-600 border-gray-200' },
+    };
+    const config = statusConfig[status] || statusConfig.pending;
+    return (
+      <span className={`px-2 py-1 rounded-full text-xs border ${config.color}`}>
+        {config.label}
+      </span>
+    );
   };
 
   const totalBills = bills.reduce((sum, b) => sum + Number(b.amount), 0);
@@ -1635,10 +1728,45 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                   <Heart size={20} className="text-red-500" />
                   <p className="text-gray-500 text-xs font-medium">สุขภาพ</p>
                 </div>
-                <p className="text-2xl font-bold text-gray-800">ปกติ</p>
-                <p className="text-xs text-green-600 font-medium mt-1">
-                  อัพเดท 2 ชม. ที่แล้ว
-                </p>
+                {loadingHealth ? (
+                  <div className="animate-pulse">
+                    <div className="h-8 bg-gray-200 rounded w-20 mb-2"></div>
+                    <div className="h-3 bg-gray-200 rounded w-32"></div>
+                  </div>
+                ) : latestHealth ? (
+                  <>
+                    <p className="text-2xl font-bold text-gray-800">
+                      {latestHealth.type === 'blood_pressure' && latestHealth.bloodPressure
+                        ? `${latestHealth.bloodPressure}`
+                        : latestHealth.type === 'blood_sugar' && latestHealth.bloodSugar
+                        ? `${latestHealth.bloodSugar} mg/dL`
+                        : latestHealth.type === 'temperature' && latestHealth.temperature
+                        ? `${latestHealth.temperature}°C`
+                        : latestHealth.type === 'weight' && latestHealth.weight
+                        ? `${latestHealth.weight} kg`
+                        : 'บันทึกแล้ว'}
+                    </p>
+                    <p className="text-xs text-green-600 font-medium mt-1">
+                      {latestHealth.type === 'blood_pressure' ? 'ความดัน' :
+                       latestHealth.type === 'blood_sugar' ? 'น้ำตาล' :
+                       latestHealth.type === 'temperature' ? 'อุณหภูมิ' :
+                       latestHealth.type === 'weight' ? 'น้ำหนัก' : 'สุขภาพ'} •{' '}
+                      {new Date(latestHealth.recordedAt).toLocaleDateString('th-TH', {
+                        day: 'numeric',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-2xl font-bold text-gray-400">-</p>
+                    <p className="text-xs text-gray-400 font-medium mt-1">
+                      ยังไม่มีข้อมูล
+                    </p>
+                  </>
+                )}
               </div>
               <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
                 <div className="flex items-center gap-2 mb-2">
@@ -1690,32 +1818,46 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                 </button>
               </div>
               <div className="space-y-3">
-                {reports.slice(0, 3).map((report, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl"
-                  >
-                    <div
-                      className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                        report.status === "success"
-                          ? "bg-green-100"
-                          : "bg-yellow-100"
-                      }`}
-                    >
-                      {report.status === "success" ? (
-                        <CheckCircle2 size={20} className="text-green-600" />
-                      ) : (
-                        <AlertCircle size={20} className="text-yellow-600" />
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-bold text-gray-800 text-sm">
-                        {report.title}
-                      </p>
-                      <p className="text-xs text-gray-500">{report.time} น.</p>
-                    </div>
+                {loadingReports ? (
+                  <div className="text-center py-6 text-gray-500">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
                   </div>
-                ))}
+                ) : reports.length === 0 ? (
+                  <div className="text-center py-6 text-gray-500">
+                    <FileText size={32} className="mx-auto mb-2 opacity-20" />
+                    <p className="text-sm">ยังไม่มีรายงาน</p>
+                  </div>
+                ) : (
+                  reports.slice(0, 3).map((report) => (
+                    <div
+                      key={report.id}
+                      className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer"
+                      onClick={() => setShowReportsModal(true)}
+                    >
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center bg-blue-100">
+                        <FileText size={20} className="text-blue-600" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-bold text-gray-800 text-sm">
+                          รายงานประจำวัน
+                          {report.caregiver && ` - ${report.caregiver.name}`}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(report.date).toLocaleDateString('th-TH')}
+                        </p>
+                      </div>
+                      <div
+                        className={`px-2 py-1 rounded-full text-xs font-bold ${
+                          report.status === "read"
+                            ? "bg-green-100 text-green-700"
+                            : "bg-blue-100 text-blue-700"
+                        }`}
+                      >
+                        {report.status === "read" ? "✓" : "•"}
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 
@@ -2412,6 +2554,79 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                           </div>
                         </div>
                       )}
+
+                      {/* สถานะการเข้างานวันนี้ */}
+                      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-4 rounded-xl border-2 border-indigo-100">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-sm font-bold text-indigo-900 flex items-center gap-2">
+                            <Clock size={16} /> สถานะการเข้างานวันนี้
+                          </h4>
+                          {loadingAttendances ? (
+                            <div className="text-xs text-gray-400">กำลังโหลด...</div>
+                          ) : (
+                            getTodayAttendance(caregiver.id) ? (
+                              getAttendanceStatusBadge(getTodayAttendance(caregiver.id)!.status)
+                            ) : (
+                              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full border border-gray-200">
+                                ยังไม่มีข้อมูล
+                              </span>
+                            )
+                          )}
+                        </div>
+                        
+                        {!loadingAttendances && getTodayAttendance(caregiver.id) && (
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-white p-3 rounded-lg">
+                              <p className="text-xs text-gray-500 mb-1">เข้างาน</p>
+                              <p className="text-lg font-bold text-green-600">
+                                {formatTime(getTodayAttendance(caregiver.id)!.checkInTime)}
+                              </p>
+                            </div>
+                            <div className="bg-white p-3 rounded-lg">
+                              <p className="text-xs text-gray-500 mb-1">ออกงาน</p>
+                              <p className="text-lg font-bold text-blue-600">
+                                {getTodayAttendance(caregiver.id)!.checkOutTime 
+                                  ? formatTime(getTodayAttendance(caregiver.id)!.checkOutTime)
+                                  : '-'}
+                              </p>
+                            </div>
+                            {getTodayAttendance(caregiver.id)!.hoursWorked > 0 && (
+                              <div className="col-span-2 bg-white p-3 rounded-lg">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <p className="text-xs text-gray-500 mb-1">ชั่วโมงทำงาน</p>
+                                    <p className="text-lg font-bold text-indigo-600">
+                                      {getTodayAttendance(caregiver.id)!.hoursWorked.toFixed(2)} ชม.
+                                    </p>
+                                  </div>
+                                  {getTodayAttendance(caregiver.id)!.isOvertime && (
+                                    <div className="text-right">
+                                      <p className="text-xs text-orange-500 mb-1">OT</p>
+                                      <p className="text-sm font-bold text-orange-600">
+                                        +{getTodayAttendance(caregiver.id)!.overtimeHours.toFixed(2)} ชม.
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        
+                        {!loadingAttendances && !getTodayAttendance(caregiver.id) && (
+                          <div className="text-center py-4">
+                            <p className="text-sm text-gray-500">ผู้ดูแลยังไม่ได้ลงเวลาเข้างานวันนี้</p>
+                          </div>
+                        )}
+
+                        {/* ดูประวัติการเข้างาน */}
+                        <button
+                          onClick={() => setSelectedCaregiverForAttendance(caregiver.id)}
+                          className="w-full mt-3 bg-white hover:bg-indigo-50 text-indigo-600 font-medium py-2 rounded-lg transition-colors border border-indigo-200 text-sm flex items-center justify-center gap-2"
+                        >
+                          <Calendar size={14} /> ดูประวัติการเข้างานทั้งหมด
+                        </button>
+                      </div>
                     </div>
                   </details>
                 </div>
@@ -3314,69 +3529,109 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
 
             {/* Content */}
             <div className="overflow-y-auto max-h-[calc(85vh-140px)] p-5 space-y-4">
-              {reports.map((report, index) => (
-                <div
-                  key={report.id}
-                  className={`bg-white rounded-2xl p-5 shadow-md border-2 transition-all hover:shadow-lg ${
-                    report.status === "success"
-                      ? "border-green-200 hover:border-green-300"
-                      : "border-yellow-200 hover:border-yellow-300"
-                  }`}
-                  style={{ animationDelay: `${index * 50}ms` }}
-                >
-                  <div className="flex items-start gap-4 mb-4">
-                    <div
-                      className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${
-                        report.status === "success"
-                          ? "bg-gradient-to-br from-green-400 to-emerald-500"
-                          : "bg-gradient-to-br from-yellow-400 to-orange-500"
-                      }`}
-                    >
-                      {report.status === "success" ? (
-                        <CheckCircle2 size={28} className="text-white" />
-                      ) : (
-                        <AlertCircle size={28} className="text-white" />
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-bold text-gray-800 text-lg mb-1">
-                        {report.title}
-                      </h3>
-                      <div className="flex items-center gap-2 text-gray-500">
-                        <Clock size={14} />
-                        <span className="text-sm">{report.time} น.</span>
-                        <span className="text-gray-300">•</span>
-                        <span className="text-sm">{report.date}</span>
+              {loadingReports ? (
+                <div className="text-center py-12 text-gray-500">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="mt-4 text-sm">กำลังโหลดรายงาน...</p>
+                </div>
+              ) : reports.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <FileText size={64} className="mx-auto mb-4 opacity-20" />
+                  <p className="text-lg font-bold mb-2">ยังไม่มีรายงาน</p>
+                  <p className="text-sm">รอผู้ดูแลส่งรายงานประจำวัน</p>
+                </div>
+              ) : (
+                reports.map((report, index) => (
+                  <div
+                    key={report.id}
+                    className={`bg-white rounded-2xl p-5 shadow-md border-2 transition-all hover:shadow-lg ${
+                      report.status === "read"
+                        ? "border-green-200 hover:border-green-300"
+                        : "border-blue-200 hover:border-blue-300"
+                    }`}
+                    style={{ animationDelay: `${index * 50}ms` }}
+                  >
+                    <div className="flex items-start gap-4 mb-4">
+                      <div
+                        className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${
+                          report.status === "read"
+                            ? "bg-gradient-to-br from-green-400 to-emerald-500"
+                            : "bg-gradient-to-br from-blue-400 to-cyan-500"
+                        }`}
+                      >
+                        <FileText size={28} className="text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-bold text-gray-800 text-lg mb-1">
+                          รายงานประจำวัน
+                        </h3>
+                        <div className="flex items-center gap-2 text-gray-500">
+                          <Clock size={14} />
+                          <span className="text-sm">
+                            {new Date(report.date).toLocaleDateString('th-TH')}
+                          </span>
+                          {report.caregiver && (
+                            <>
+                              <span className="text-gray-300">•</span>
+                              <span className="text-sm">โดย {report.caregiver.name}</span>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div
-                    className={`rounded-xl p-4 ${
-                      report.status === "success"
-                        ? "bg-green-50"
-                        : "bg-yellow-50"
-                    }`}
-                  >
-                    <p className="text-sm text-gray-700 leading-relaxed">
-                      {report.details}
-                    </p>
-                  </div>
+                    <div className="space-y-3">
+                      {report.moodStatus && (
+                        <div className="rounded-xl p-4 bg-purple-50">
+                          <p className="text-xs text-purple-600 font-bold mb-1">อารมณ์</p>
+                          <p className="text-sm text-gray-700">{report.moodStatus}</p>
+                        </div>
+                      )}
+                      
+                      {report.activities && (
+                        <div className="rounded-xl p-4 bg-blue-50">
+                          <p className="text-xs text-blue-600 font-bold mb-1">กิจกรรม</p>
+                          <p className="text-sm text-gray-700">{report.activities}</p>
+                        </div>
+                      )}
+                      
+                      {report.meals && (
+                        <div className="rounded-xl p-4 bg-orange-50">
+                          <p className="text-xs text-orange-600 font-bold mb-1">มื้ออาหาร</p>
+                          <p className="text-sm text-gray-700">{report.meals}</p>
+                        </div>
+                      )}
+                      
+                      {report.healthNotes && (
+                        <div className="rounded-xl p-4 bg-green-50">
+                          <p className="text-xs text-green-600 font-bold mb-1">สุขภาพ</p>
+                          <p className="text-sm text-gray-700">{report.healthNotes}</p>
+                        </div>
+                      )}
+                      
+                      {report.notes && (
+                        <div className="rounded-xl p-4 bg-gray-50">
+                          <p className="text-xs text-gray-600 font-bold mb-1">หมายเหตุ</p>
+                          <p className="text-sm text-gray-700">{report.notes}</p>
+                        </div>
+                      )}
+                    </div>
 
-                  {/* Status Badge */}
-                  <div className="mt-3 flex justify-end">
-                    <span
-                      className={`text-xs px-3 py-1.5 rounded-full font-bold ${
-                        report.status === "success"
-                          ? "bg-green-100 text-green-700"
-                          : "bg-yellow-100 text-yellow-700"
-                      }`}
-                    >
-                      {report.status === "success" ? "✓ ปกติ" : "⚠ ต้องติดตาม"}
-                    </span>
+                    {/* Status Badge */}
+                    <div className="mt-3 flex justify-end">
+                      <span
+                        className={`text-xs px-3 py-1.5 rounded-full font-bold ${
+                          report.status === "read"
+                            ? "bg-green-100 text-green-700"
+                            : "bg-blue-100 text-blue-700"
+                        }`}
+                      >
+                        {report.status === "read" ? "✓ อ่านแล้ว" : "📝 ใหม่"}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
 
             {/* Footer */}
@@ -3410,54 +3665,71 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
             </div>
 
             <div className="space-y-3">
-              {notifications.map((notification) => (
-                <div
-                  key={notification.id}
-                  className={`rounded-2xl p-4 border transition-all ${
-                    notification.isRead
-                      ? "bg-gray-50 border-gray-100"
-                      : "bg-purple-50 border-purple-200"
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div
-                      className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-                        notification.isRead ? "bg-gray-200" : "bg-purple-500"
-                      }`}
-                    >
-                      <Bell
-                        size={20}
-                        className={
-                          notification.isRead ? "text-gray-500" : "text-white"
-                        }
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <h3
-                        className={`font-bold ${
-                          notification.isRead
-                            ? "text-gray-600"
-                            : "text-gray-800"
-                        } mb-1`}
-                      >
-                        {notification.title}
-                      </h3>
-                      <p className="text-sm text-gray-600 mb-2">
-                        {notification.message}
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <Clock size={12} className="text-gray-400" />
-                        <span className="text-xs text-gray-500">
-                          {notification.time}
-                        </span>
-                      </div>
-                    </div>
-                    {!notification.isRead && (
-                      <div className="w-2 h-2 bg-purple-500 rounded-full shrink-0 mt-2"></div>
-                    )}
-                  </div>
+              {loadingNotifications ? (
+                <div className="text-center py-8 text-gray-500">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
+                  <p className="mt-2 text-sm">กำลังโหลด...</p>
                 </div>
-              ))}
+              ) : notifications.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <Bell size={48} className="mx-auto mb-2 opacity-20" />
+                  <p>ไม่มีการแจ้งเตือน</p>
+                </div>
+              ) : (
+                notifications.map((notification) => (
+                  <div
+                    key={notification.id}
+                    onClick={() => {
+                      if (!notification.isRead) {
+                        markNotificationAsRead(notification.id);
+                      }
+                    }}
+                    className={`rounded-2xl p-4 border transition-all cursor-pointer hover:shadow-md ${
+                      notification.isRead
+                        ? "bg-gray-50 border-gray-100"
+                        : "bg-purple-50 border-purple-200"
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+                          notification.isRead ? "bg-gray-200" : "bg-purple-500"
+                        }`}
+                      >
+                        <Bell
+                          size={20}
+                          className={
+                            notification.isRead ? "text-gray-500" : "text-white"
+                          }
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <h3
+                          className={`font-bold ${
+                            notification.isRead
+                              ? "text-gray-600"
+                              : "text-gray-800"
+                          } mb-1`}
+                        >
+                          {notification.title}
+                        </h3>
+                        <p className="text-sm text-gray-600 mb-2">
+                          {notification.message}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <Clock size={12} className="text-gray-400" />
+                          <span className="text-xs text-gray-500">
+                            {new Date(notification.createdAt).toLocaleString('th-TH')}
+                          </span>
+                        </div>
+                      </div>
+                      {!notification.isRead && (
+                        <div className="w-2 h-2 bg-purple-500 rounded-full shrink-0 mt-2"></div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
 
             <button
@@ -3778,6 +4050,121 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                 onClick={() => handleDeleteCaregiverConfirmed(confirmDeleteCaregiverId)}
               >
                 ลบ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Attendance History Modal */}
+      {selectedCaregiverForAttendance && (
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 animate-in fade-in duration-200">
+          <div className="bg-white w-full sm:max-w-2xl sm:rounded-3xl rounded-t-3xl max-h-[85vh] overflow-hidden animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 duration-300 shadow-2xl">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 pb-8 sticky top-0 z-10">
+              <div className="flex justify-between items-start mb-2">
+                <div>
+                  <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                    <Calendar size={28} />
+                    ประวัติการเข้างาน
+                  </h2>
+                  <p className="text-purple-100 mt-1">
+                    {caregivers.find(c => c.id === selectedCaregiverForAttendance)?.name}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSelectedCaregiverForAttendance(null)}
+                  className="bg-white/20 hover:bg-white/30 p-2 rounded-full transition-colors"
+                >
+                  <X size={24} className="text-white" />
+                </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="overflow-y-auto max-h-[calc(85vh-120px)] p-5 space-y-3">
+              {loadingAttendances ? (
+                <div className="text-center py-8 text-gray-400">
+                  กำลังโหลด...
+                </div>
+              ) : (
+                <>
+                  {caregiverAttendances[selectedCaregiverForAttendance]?.length > 0 ? (
+                    caregiverAttendances[selectedCaregiverForAttendance].map((attendance) => (
+                      <div
+                        key={attendance.id}
+                        className="bg-white border-2 border-gray-100 rounded-2xl p-4 hover:border-indigo-200 transition-all"
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div>
+                            <p className="font-bold text-gray-800">
+                              {new Date(attendance.workDate).toLocaleDateString('th-TH', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                                weekday: 'long'
+                              })}
+                            </p>
+                          </div>
+                          {getAttendanceStatusBadge(attendance.status)}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 mt-3">
+                          <div className="bg-green-50 p-3 rounded-xl">
+                            <p className="text-xs text-green-600 mb-1">เข้างาน</p>
+                            <p className="text-lg font-bold text-green-700">
+                              {formatTime(attendance.checkInTime)}
+                            </p>
+                          </div>
+                          <div className="bg-blue-50 p-3 rounded-xl">
+                            <p className="text-xs text-blue-600 mb-1">ออกงาน</p>
+                            <p className="text-lg font-bold text-blue-700">
+                              {attendance.checkOutTime 
+                                ? formatTime(attendance.checkOutTime)
+                                : '-'}
+                            </p>
+                          </div>
+                          {attendance.hoursWorked > 0 && (
+                            <>
+                              <div className="bg-indigo-50 p-3 rounded-xl">
+                                <p className="text-xs text-indigo-600 mb-1">ชั่วโมงทำงาน</p>
+                                <p className="text-lg font-bold text-indigo-700">
+                                  {attendance.hoursWorked.toFixed(2)} ชม.
+                                </p>
+                              </div>
+                              {attendance.isOvertime && (
+                                <div className="bg-orange-50 p-3 rounded-xl">
+                                  <p className="text-xs text-orange-600 mb-1">OT</p>
+                                  <p className="text-lg font-bold text-orange-700">
+                                    +{attendance.overtimeHours.toFixed(2)} ชม.
+                                  </p>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-12">
+                      <Calendar size={48} className="mx-auto text-gray-300 mb-3" />
+                      <p className="text-gray-400 font-medium">ยังไม่มีประวัติการเข้างาน</p>
+                      <p className="text-gray-400 text-sm mt-1">
+                        ผู้ดูแลจะต้องลงเวลาเข้า-ออกงานผ่านแอปพลิเคชัน
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="sticky bottom-0 bg-white border-t p-4 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
+              <button
+                onClick={() => setSelectedCaregiverForAttendance(null)}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-2xl transition-colors"
+              >
+                ปิด
               </button>
             </div>
           </div>

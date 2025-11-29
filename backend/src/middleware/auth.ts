@@ -8,6 +8,12 @@ declare global {
       userId?: string;
       userType?: 'family' | 'caregiver';
       userName?: string;
+      user?: {
+        userId?: string;
+        caregiverId?: string;
+        type?: 'family' | 'caregiver';
+        name?: string;
+      };
     }
   }
 }
@@ -47,4 +53,37 @@ export const requireCaregiver = (req: Request, res: Response, next: NextFunction
     return res.status(403).json({ error: 'Caregiver access required' });
   }
   next();
+};
+
+// Combined middleware for caregiver authentication
+export const authenticateCaregiver = (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+      return res.status(401).json({ error: 'Access token required' });
+    }
+
+    const decoded = verifyToken(token);
+    
+    if (decoded.type !== 'caregiver') {
+      return res.status(403).json({ error: 'Caregiver access required' });
+    }
+
+    // Set both old and new format for compatibility
+    req.userId = decoded.userId;
+    req.userType = 'caregiver';
+    req.userName = decoded.name;
+    req.user = {
+      userId: decoded.userId,
+      caregiverId: decoded.userId, // For caregivers, userId is caregiverId
+      type: 'caregiver',
+      name: decoded.name,
+    };
+    
+    next();
+  } catch (error) {
+    return res.status(403).json({ error: 'Invalid or expired token' });
+  }
 };
