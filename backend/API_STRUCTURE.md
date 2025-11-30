@@ -220,3 +220,21 @@ Authorization: Bearer <caregiver-jwt-token>
 - `/api/elders` (ไม่ชัดว่าใครใช้)
 - `/api/bills` (ไม่รู้ว่า family หรือ caregiver)
 
+
+<!-- # Database
+DATABASE_URL="postgresql://postgres:1234@localhost:5432/care-link?schema=public"
+
+# JWT Secret
+JWT_SECRET="eyJhbGciOiJIUzI1NiJ9.eyJSb2xlIjoiQWRtaW4iLCJJc3N1ZXIiOiJJc3N1ZXIiLCJVc2VybmFtZSI6IkphdmFJblVzZSIsImV4cCI6MTc2NDI2MTE1OCwiaWF0IjoxNzY0MjYxMTU4fQ.URLGMc8siPrWFFlODBQSr9KpY28MOf_xq_Qz_utFFsA"
+
+# Port
+PORT=8080
+
+# Frontend URL (for CORS)
+FRONTEND_URL="http://localhost:3000" || "https://care-link-family.vercel.app" || "http://192.168.1.44:3000"
+
+# Cloudinary (for image upload - optional)
+CLOUDINARY_CLOUD_NAME=""
+CLOUDINARY_API_KEY=""
+CLOUDINARY_API_SECRET="" -->
+
