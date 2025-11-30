@@ -237,3 +237,5 @@ FRONTEND_URL="http://localhost:3000" || "https://care-link-family.vercel.app" ||
 CLOUDINARY_CLOUD_NAME=""
 CLOUDINARY_API_KEY=""
 CLOUDINARY_API_SECRET="" -->
+
+<!-- NEXT_PUBLIC_BASE_URL=http://localhost:8080/api -->
