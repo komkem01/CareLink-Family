@@ -159,21 +159,48 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
   // ดึง token จาก cookie
   const token = typeof window !== "undefined" ? Cookies.get("token") || "" : "";
 
-  // ดึงบัญชีจาก backend เมื่อเปลี่ยน elder
+  // ดึงบัญชีจาก backend เมื่อเปลี่ยน elder และ auto-refresh ทุก 10 วินาที
   React.useEffect(() => {
     if (!selectedElder?.id) return;
+    
+    const today = new Date().toISOString().split('T')[0];
+    
+    const fetchBills = () => {
+      // ไม่ต้อง setLoading เพื่อไม่ให้กระพริบ
+      fetch(`${BASE_URL}/family/bills?elderId=${selectedElder.id}&date=${today}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          const billsData = Array.isArray(data)
+            ? data.map((bill: any) => ({
+                ...bill,
+                amount: Number(bill.amount),
+              })).filter((bill: any) => 
+                bill.date.startsWith(today)
+              )
+            : [];
+          setBills(billsData);
+        })
+        .catch(() => {
+          // ไม่ต้องล้างข้อมูลเก่า
+        });
+    };
+    
+    // โหลดครั้งแรกด้วย loading state
     setLoadingBills(true);
-    fetch(`${BASE_URL}/family/bills?elderId=${selectedElder.id}`, {
+    fetch(`${BASE_URL}/family/bills?elderId=${selectedElder.id}&date=${today}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => res.json())
       .then((data) => {
-        // แปลง amount เป็น number เพื่อป้องกันการต่อ string
         const billsData = Array.isArray(data)
           ? data.map((bill: any) => ({
               ...bill,
               amount: Number(bill.amount),
-            }))
+            })).filter((bill: any) => 
+              bill.date.startsWith(today)
+            )
           : [];
         setBills(billsData);
         setLoadingBills(false);
@@ -182,24 +209,58 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
         setBills([]);
         setLoadingBills(false);
       });
+    
+    // Auto-refresh ทุก 10 วินาที
+    const interval = setInterval(fetchBills, 10000);
+    
+    return () => clearInterval(interval);
   }, [selectedElder?.id, BASE_URL, token]);
 
-  // ดึงกิจกรรมจาก backend เมื่อเปลี่ยน elder
+  // ดึงกิจกรรมจาก backend เมื่อเปลี่ยน elder และ refresh ทุก 10 วินาที
   React.useEffect(() => {
     if (!selectedElder?.id) return;
+    
+    const today = new Date().toISOString().split('T')[0];
+    
+    const fetchActivities = () => {
+      // ไม่ต้อง setLoadingActivities เพื่อไม่ให้หน้ากระพริบ
+      fetch(`${BASE_URL}/family/activities?elderId=${selectedElder.id}&date=${today}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          const todayData = Array.isArray(data) ? data.filter((a: any) => 
+            a.date.startsWith(today)
+          ) : [];
+          setActivities(todayData);
+        })
+        .catch(() => {
+          // ไม่ต้องล้างข้อมูลเก่าถ้า fetch ล้มเหลว
+        });
+    };
+    
+    // โหลดครั้งแรกด้วย loading state
     setLoadingActivities(true);
-    fetch(`${BASE_URL}/family/activities?elderId=${selectedElder.id}`, {
+    fetch(`${BASE_URL}/family/activities?elderId=${selectedElder.id}&date=${today}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => res.json())
       .then((data) => {
-        setActivities(Array.isArray(data) ? data : []);
+        const todayData = Array.isArray(data) ? data.filter((a: any) => 
+          a.date.startsWith(today)
+        ) : [];
+        setActivities(todayData);
         setLoadingActivities(false);
       })
       .catch(() => {
         setActivities([]);
         setLoadingActivities(false);
       });
+    
+    // โหลดซ้ำทุก 10 วินาทีเพื่อดูการอัปเดตจากผู้ดูแล (โหลดเบาๆ ไม่แสดง loading)
+    const interval = setInterval(fetchActivities, 10000);
+    
+    return () => clearInterval(interval);
   }, [selectedElder?.id, BASE_URL, token]);
 
   // ดึงรายชื่อผู้ดูแลจาก backend (เฉพาะของผู้สูงอายุที่เลือก)
@@ -223,8 +284,23 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
       });
   }, [selectedElder?.id, BASE_URL, token]);
 
-  // ดึง notifications จาก backend
+  // ดึง notifications จาก backend และ auto-refresh ทุก 10 วินาที
   React.useEffect(() => {
+    const fetchNotifications = () => {
+      // ไม่ต้อง setLoading เพื่อไม่ให้กระพริบ
+      fetch(`${BASE_URL}/family/notifications`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          setNotifications(Array.isArray(data) ? data : []);
+        })
+        .catch(() => {
+          // ไม่ต้องล้างข้อมูลเก่าถ้า fetch ล้มเหลว
+        });
+    };
+
+    // โหลดครั้งแรกด้วย loading state
     setLoadingNotifications(true);
     fetch(`${BASE_URL}/family/notifications`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -238,17 +314,49 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
         setNotifications([]);
         setLoadingNotifications(false);
       });
+
+    // Auto-refresh ทุก 10 วินาทีเพื่อดูการแจ้งเตือนใหม่จากผู้ดูแล
+    const interval = setInterval(fetchNotifications, 10000);
+    
+    return () => clearInterval(interval);
   }, [BASE_URL, token]);
 
-  // ดึงข้อมูลสุขภาพล่าสุด
+  // ดึงข้อมูลสุขภาพล่าสุด และ auto-refresh ทุก 10 วินาที
   React.useEffect(() => {
     if (!selectedElder?.id) {
       setLatestHealth(null);
       setHealthRecords([]);
       return;
     }
+    
+    const fetchHealthData = () => {
+      // Fetch latest health record
+      fetch(`${BASE_URL}/health/latest?elderId=${selectedElder.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          setLatestHealth(data);
+        })
+        .catch(() => {
+          // ไม่ต้องล้างข้อมูลเก่า
+        });
+      
+      // Fetch all health records
+      fetch(`${BASE_URL}/health/records?elderId=${selectedElder.id}&limit=20`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          setHealthRecords(Array.isArray(data) ? data : []);
+        })
+        .catch(() => {
+          // ไม่ต้องล้างข้อมูลเก่า
+        });
+    };
+    
+    // โหลดครั้งแรก
     setLoadingHealth(true);
-    // Fetch latest health record
     fetch(`${BASE_URL}/health/latest?elderId=${selectedElder.id}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -260,7 +368,6 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
         setLatestHealth(null);
       });
     
-    // Fetch all health records
     fetch(`${BASE_URL}/health/records?elderId=${selectedElder.id}&limit=20`, {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -273,14 +380,34 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
         setHealthRecords([]);
         setLoadingHealth(false);
       });
+    
+    // Auto-refresh ทุก 10 วินาที
+    const interval = setInterval(fetchHealthData, 10000);
+    
+    return () => clearInterval(interval);
   }, [selectedElder?.id, BASE_URL, token]);
 
-  // ดึงข้อมูล Daily Reports สำหรับแสดง mood
+  // ดึงข้อมูล Daily Reports สำหรับแสดง mood และ auto-refresh ทุก 10 วินาที
   React.useEffect(() => {
     if (!selectedElder?.id) {
       setReports([]);
       return;
     }
+    
+    const fetchReports = () => {
+      fetch(`${BASE_URL}/family/reports?elderId=${selectedElder.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          setReports(Array.isArray(data) ? data : []);
+        })
+        .catch(() => {
+          // ไม่ต้องล้างข้อมูลเก่า
+        });
+    };
+    
+    // โหลดครั้งแรก
     setLoadingReports(true);
     fetch(`${BASE_URL}/family/reports?elderId=${selectedElder.id}`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -294,6 +421,11 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
         setReports([]);
         setLoadingReports(false);
       });
+    
+    // Auto-refresh ทุก 10 วินาที
+    const interval = setInterval(fetchReports, 10000);
+    
+    return () => clearInterval(interval);
   }, [selectedElder?.id, BASE_URL, token]);
 
   // ดึงข้อมูล attendance ของผู้ดูแลทั้งหมด
@@ -808,14 +940,26 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
             });
         }, 300);
       } else {
-        showAlertMessage(
-          "ลบล้มเหลว",
-          data.message || "เกิดข้อผิดพลาดในการลบข้อมูล",
-          "error"
-        );
+        // แสดงข้อความ error ที่ชัดเจน
+        if (res.status === 400) {
+          // กรณีผู้ดูแลกำลังเข้างานอยู่
+          showAlertMessage(
+            "ลบไม่ได้",
+            data.message || "ผู้ดูแลกำลังเข้างานอยู่ กรุณารอให้ออกงานก่อน",
+            "error"
+          );
+        } else {
+          showAlertMessage(
+            "ลบล้มเหลว",
+            data.message || "เกิดข้อผิดพลาดในการลบข้อมูล",
+            "error"
+          );
+        }
       }
     } catch {
       showAlertMessage("ข้อผิดพลาด", "เกิดข้อผิดพลาดในการลบข้อมูล", "error");
+    } finally {
+      setConfirmDeleteCaregiverId(null);
     }
   };
 
@@ -1525,6 +1669,14 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
     );
   };
 
+  // Get observation records (mood notes)
+  const getObservationRecords = () => {
+    return healthRecords
+      .filter(record => record.type === 'observation')
+      .sort((a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime())
+      .slice(0, 10); // Show last 10 observations
+  };
+
   // Get attendance status badge
   const getAttendanceStatusBadge = (status: string) => {
     const statusConfig: { [key: string]: { label: string; color: string } } = {
@@ -1562,6 +1714,210 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
     .filter((b) => !b.isPaid)
     .reduce((sum, b) => sum + Number(b.amount), 0);
   const todayActivities = activities.filter((a) => !a.completed).length;
+
+  // วิเคราะห์สถานะสุขภาพ
+  const getHealthStatus = () => {
+    let status: 'good' | 'warning' | 'emergency' | 'unknown' = 'good';
+    let label = 'สบายดี';
+    let icon = '😊';
+    const issues: string[] = [];
+
+    // 1. วิเคราะห์จากข้อมูลสุขภาพล่าสุด
+    if (latestHealth) {
+      // ตรวจสอบความดันโลหิต
+      if (latestHealth.type === 'blood_pressure' && latestHealth.bloodPressure) {
+        const bp = latestHealth.bloodPressure.split('/');
+        const systolic = parseInt(bp[0]);
+        const diastolic = parseInt(bp[1]);
+        
+        if (systolic >= 180 || diastolic >= 120) {
+          status = 'emergency';
+          label = 'ฉุกเฉิน';
+          icon = '🚨';
+          issues.push('ความดันสูงมาก');
+        } else if (systolic >= 140 || diastolic >= 90) {
+          if (status === 'good') {
+            status = 'warning';
+            label = 'ต้องดูแล';
+            icon = '⚠️';
+          }
+          issues.push('ความดันสูง');
+        } else if (systolic < 90 || diastolic < 60) {
+          if (status === 'good') {
+            status = 'warning';
+            label = 'ต้องดูแล';
+            icon = '⚠️';
+          }
+          issues.push('ความดันต่ำ');
+        }
+      }
+
+      // ตรวจสอบน้ำตาลในเลือด
+      if (latestHealth.type === 'blood_sugar' && latestHealth.bloodSugar) {
+        const sugar = latestHealth.bloodSugar;
+        if (sugar >= 250 || sugar < 70) {
+          status = 'emergency';
+          label = 'ฉุกเฉิน';
+          icon = '🚨';
+          issues.push('น้ำตาลในเลือดผิดปกติมาก');
+        } else if (sugar >= 180 || sugar < 80) {
+          if (status === 'good') {
+            status = 'warning';
+            label = 'ต้องดูแล';
+            icon = '⚠️';
+          }
+          issues.push('น้ำตาลในเลือดสูง');
+        }
+      }
+
+      // ตรวจสอบอุณหภูมิ
+      if (latestHealth.type === 'temperature' && latestHealth.temperature) {
+        const temp = latestHealth.temperature;
+        if (temp >= 39.5 || temp < 35) {
+          status = 'emergency';
+          label = 'ฉุกเฉิน';
+          icon = '🚨';
+          issues.push('อุณหภูมิผิดปกติมาก');
+        } else if (temp >= 38 || temp < 36) {
+          if (status === 'good') {
+            status = 'warning';
+            label = 'ต้องดูแล';
+            icon = '⚠️';
+          }
+          issues.push('มีไข้');
+        }
+      }
+    }
+
+    // 2. วิเคราะห์จากรายงานล่าสุดของผู้ดูแล (3 รายงานล่าสุด)
+    const recentReports = reports.slice(0, 3);
+    recentReports.forEach(report => {
+      // ตรวจสอบ healthStatus จากรายงาน
+      if (report.healthStatus === 'urgent') {
+        status = 'emergency';
+        label = 'ฉุกเฉิน';
+        icon = '🚨';
+      } else if (report.healthStatus === 'concern' && status !== 'emergency') {
+        status = 'warning';
+        label = 'ต้องดูแล';
+        icon = '⚠️';
+      }
+
+      // วิเคราะห์จาก highlights
+      const highlights = report.highlights || [];
+      highlights.forEach((h: string) => {
+        const lower = h.toLowerCase();
+        
+        if (lower.includes('ซึม') || lower.includes('เศร้า')) {
+          if (status === 'good') {
+            status = 'warning';
+            label = 'ต้องดูแล';
+            icon = '😐';
+          }
+          if (!issues.includes('อารมณ์ไม่ดี')) issues.push('อารมณ์ไม่ดี');
+        }
+        
+        if (lower.includes('นอนไม่หลับ') || lower.includes('นอนยาก')) {
+          if (status === 'good') {
+            status = 'warning';
+            label = 'ต้องดูแล';
+            icon = '😐';
+          }
+          if (!issues.includes('นอนไม่หลับ')) issues.push('นอนไม่หลับ');
+        }
+        
+        if (lower.includes('ปวดหัว') || lower.includes('ปวด')) {
+          if (status === 'good') {
+            status = 'warning';
+            label = 'ต้องดูแล';
+            icon = '😐';
+          }
+          if (!issues.includes('มีอาการปวด')) issues.push('มีอาการปวด');
+        }
+        
+        if (lower.includes('ไม่ยอมทาน') || lower.includes('ทานน้อย')) {
+          if (status === 'good') {
+            status = 'warning';
+            label = 'ต้องดูแล';
+            icon = '😐';
+          }
+          if (!issues.includes('ทานอาหารน้อย')) issues.push('ทานอาหารน้อย');
+        }
+        
+        if (lower.includes('ความดันสูง') || lower.includes('ดันสูง')) {
+          status = 'emergency';
+          label = 'ฉุกเฉิน';
+          icon = '🚨';
+          if (!issues.includes('ความดันสูง')) issues.push('ความดันสูง');
+        }
+      });
+
+      // วิเคราะห์จาก concerns
+      const concerns = report.concerns || [];
+      if (concerns.length > 0) {
+        if (status === 'good') {
+          status = 'warning';
+          label = 'ต้องดูแล';
+          icon = '⚠️';
+        }
+        concerns.forEach((c: string) => {
+          if (!issues.includes(c)) issues.push(c);
+        });
+      }
+    });
+
+    // 3. ถ้าไม่มีข้อมูลเลย
+    if (!latestHealth && reports.length === 0) {
+      return { 
+        status: 'unknown', 
+        label: 'ไม่มีข้อมูล', 
+        color: 'gray', 
+        bgColor: 'bg-gray-100', 
+        textColor: 'text-gray-600', 
+        borderColor: 'border-gray-200',
+        icon: '❓',
+        issues: []
+      };
+    }
+
+    // 4. สร้าง return object ตาม status
+    const colorMap = {
+      good: {
+        color: 'green',
+        bgColor: 'bg-green-100',
+        textColor: 'text-green-700',
+        borderColor: 'border-green-300'
+      },
+      warning: {
+        color: 'orange',
+        bgColor: 'bg-yellow-100',
+        textColor: 'text-yellow-700',
+        borderColor: 'border-yellow-300'
+      },
+      emergency: {
+        color: 'red',
+        bgColor: 'bg-red-100',
+        textColor: 'text-red-700',
+        borderColor: 'border-red-300'
+      },
+      unknown: {
+        color: 'gray',
+        bgColor: 'bg-gray-100',
+        textColor: 'text-gray-600',
+        borderColor: 'border-gray-200'
+      }
+    };
+
+    return {
+      status,
+      label,
+      icon,
+      issues,
+      ...colorMap[status]
+    };
+  };
+
+  const healthStatus = getHealthStatus();
 
   return (
     <div className="flex-1 flex flex-col bg-gray-50 overflow-hidden h-full">
@@ -1614,60 +1970,68 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
           <div className="animate-in fade-in duration-300 space-y-6">
             {/* Summary Cards */}
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+              {/* Health Status Card */}
+              <div className={`rounded-2xl p-4 shadow-sm border-2 ${healthStatus.borderColor} ${healthStatus.bgColor}`}>
                 <div className="flex items-center gap-2 mb-2">
-                  <Heart size={20} className="text-red-500" />
-                  <p className="text-gray-500 text-xs font-medium">สุขภาพ</p>
+                  <Heart size={20} className={healthStatus.textColor} />
+                  <p className={`text-xs font-medium ${healthStatus.textColor}`}>สถานะสุขภาพ</p>
                 </div>
                 {loadingHealth ? (
                   <div className="animate-pulse">
                     <div className="h-8 bg-gray-200 rounded w-20 mb-2"></div>
                     <div className="h-3 bg-gray-200 rounded w-32"></div>
                   </div>
-                ) : latestHealth ? (
-                  <>
-                    <p className="text-2xl font-bold text-gray-800">
-                      {latestHealth.type === "blood_pressure" &&
-                      latestHealth.bloodPressure
-                        ? `${latestHealth.bloodPressure}`
-                        : latestHealth.type === "blood_sugar" &&
-                          latestHealth.bloodSugar
-                        ? `${latestHealth.bloodSugar} mg/dL`
-                        : latestHealth.type === "temperature" &&
-                          latestHealth.temperature
-                        ? `${latestHealth.temperature}°C`
-                        : latestHealth.type === "weight" && latestHealth.weight
-                        ? `${latestHealth.weight} kg`
-                        : "บันทึกแล้ว"}
-                    </p>
-                    <p className="text-xs text-green-600 font-medium mt-1">
-                      {latestHealth.type === "blood_pressure"
-                        ? "ความดัน"
-                        : latestHealth.type === "blood_sugar"
-                        ? "น้ำตาล"
-                        : latestHealth.type === "temperature"
-                        ? "อุณหภูมิ"
-                        : latestHealth.type === "weight"
-                        ? "น้ำหนัก"
-                        : "สุขภาพ"}{" "}
-                      •{" "}
-                      {new Date(latestHealth.recordedAt).toLocaleDateString(
-                        "th-TH",
-                        {
-                          day: "numeric",
-                          month: "short",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        }
-                      )}
-                    </p>
-                  </>
                 ) : (
                   <>
-                    <p className="text-2xl font-bold text-gray-400">-</p>
-                    <p className="text-xs text-gray-400 font-medium mt-1">
-                      ยังไม่มีข้อมูล
-                    </p>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-2xl">{healthStatus.icon || '💚'}</span>
+                      <p className={`text-2xl font-bold ${healthStatus.textColor}`}>
+                        {healthStatus.label}
+                      </p>
+                    </div>
+                    {healthStatus.issues && healthStatus.issues.length > 0 ? (
+                      <div className="mt-2 space-y-0.5">
+                        {healthStatus.issues.slice(0, 2).map((issue: string, idx: number) => (
+                          <p key={idx} className={`text-xs font-medium ${healthStatus.textColor}`}>
+                            • {issue}
+                          </p>
+                        ))}
+                        {healthStatus.issues.length > 2 && (
+                          <p className={`text-xs font-medium ${healthStatus.textColor} opacity-70`}>
+                            +{healthStatus.issues.length - 2} อาการอื่น
+                          </p>
+                        )}
+                      </div>
+                    ) : latestHealth ? (
+                      <p className={`text-xs font-medium ${healthStatus.textColor} opacity-80`}>
+                        {latestHealth.type === "blood_pressure" &&
+                        latestHealth.bloodPressure
+                          ? `ความดัน ${latestHealth.bloodPressure}`
+                          : latestHealth.type === "blood_sugar" &&
+                            latestHealth.bloodSugar
+                          ? `น้ำตาล ${latestHealth.bloodSugar} mg/dL`
+                          : latestHealth.type === "temperature" &&
+                            latestHealth.temperature
+                          ? `อุณหภูมิ ${latestHealth.temperature}°C`
+                          : latestHealth.type === "weight" && latestHealth.weight
+                          ? `น้ำหนัก ${latestHealth.weight} kg`
+                          : "บันทึกแล้ว"}
+                        {" • "}
+                        {new Date(latestHealth.recordedAt).toLocaleDateString(
+                          "th-TH",
+                          {
+                            day: "numeric",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          }
+                        )}
+                      </p>
+                    ) : (
+                      <p className={`text-xs font-medium ${healthStatus.textColor} opacity-80`}>
+                        ยังไม่มีข้อมูลสุขภาพ
+                      </p>
+                    )}
                   </>
                 )}
               </div>
@@ -1704,6 +2068,267 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                   รวมทั้งหมด: {totalBills.toLocaleString()} บาท
                 </span>
               </div>
+            </div>
+
+            {/* Daily Reports */}
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
+              <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <FileText size={20} className="text-purple-600" />
+                รายงานจากผู้ดูแล
+              </h3>
+              {loadingReports ? (
+                <div className="text-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-600 mx-auto"></div>
+                  <p className="mt-2 text-sm text-gray-500">กำลังโหลด...</p>
+                </div>
+              ) : reports.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <FileText size={48} className="mx-auto mb-2 opacity-20" />
+                  <p>ยังไม่มีรายงาน</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {reports.slice(0, 3).map((report) => {
+                    // แปลง date ให้ปลอดภัย
+                    const reportDate = report.sentAt || report.date || report.createdAt;
+                    const dateObj = reportDate ? new Date(reportDate) : null;
+                    const isValidDate = dateObj && !isNaN(dateObj.getTime());
+                    
+                    // วิเคราะห์สถานะสุขภาพจากข้อมูลต่างๆ
+                    const analyzeHealth = () => {
+                      const analysis = {
+                        status: 'normal' as 'normal' | 'warning' | 'danger',
+                        icon: '😊',
+                        color: 'green',
+                        title: 'สบายดี',
+                        issues: [] as string[],
+                        recommendations: [] as string[]
+                      };
+
+                      // วิเคราะห์จาก healthStatus
+                      if (report.healthStatus === 'concern') {
+                        analysis.status = 'warning';
+                        analysis.icon = '😐';
+                        analysis.color = 'yellow';
+                        analysis.title = 'ต้องติดตาม';
+                      } else if (report.healthStatus === 'urgent') {
+                        analysis.status = 'danger';
+                        analysis.icon = '😰';
+                        analysis.color = 'red';
+                        analysis.title = 'ต้องดูแลเร่งด่วน';
+                      }
+
+                      // วิเคราะห์จาก highlights (อารมณ์และพฤติกรรม)
+                      const highlights = report.highlights || [];
+                      const concerns = report.concerns || [];
+                      
+                      highlights.forEach((h: string) => {
+                        const lower = h.toLowerCase();
+                        
+                        // ตรวจอาการเชิงลบ
+                        if (lower.includes('ซึม') || lower.includes('เศร้า') || lower.includes('เหนื่อย')) {
+                          analysis.status = analysis.status === 'normal' ? 'warning' : analysis.status;
+                          analysis.issues.push('😔 อารมณ์ไม่ดี/เหนื่อย');
+                          analysis.recommendations.push('💬 ควรชวนคุยและให้กำลังใจ');
+                        }
+                        
+                        if (lower.includes('นอนไม่หลับ') || lower.includes('นอนยาก')) {
+                          analysis.status = 'warning';
+                          analysis.issues.push('😴 นอนไม่หลับ');
+                          analysis.recommendations.push('🌙 พิจารณาให้ยานอนหรือปรึกษาแพทย์');
+                        }
+                        
+                        if (lower.includes('ปวดหัว') || lower.includes('ปวด')) {
+                          analysis.status = 'warning';
+                          analysis.issues.push('🤕 มีอาการปวด');
+                          analysis.recommendations.push('💊 พิจารณาให้ยาแก้ปวดหรือพาพบแพทย์');
+                        }
+                        
+                        if (lower.includes('ไม่ยอมทาน') || lower.includes('ทานน้อย') || lower.includes('ไม่อยากทาน')) {
+                          analysis.status = 'warning';
+                          analysis.issues.push('🍚 ทานอาหารน้อย');
+                          analysis.recommendations.push('🥣 ลองเมนูที่ชอบหรือให้อาหารเสริม');
+                        }
+                        
+                        // ตรวจความดัน
+                        if (lower.includes('ความดันสูง') || lower.includes('ดันสูง')) {
+                          analysis.status = 'danger';
+                          analysis.issues.push('💉 ความดันสูง');
+                          analysis.recommendations.push('🏥 ควรพบแพทย์โดยเร็ว');
+                        }
+                        
+                        if (lower.includes('ความดันต่ำ') || lower.includes('ดันต่ำ')) {
+                          analysis.status = 'warning';
+                          analysis.issues.push('💉 ความดันต่ำ');
+                          analysis.recommendations.push('🧂 ดื่มน้ำเกลือแร่หรือพักผ่อน');
+                        }
+                        
+                        // ตรวจอาการเชิงบวก
+                        if (lower.includes('ดี') || lower.includes('แจ่มใส') || lower.includes('ร่าเริง')) {
+                          if (analysis.status === 'normal') {
+                            analysis.icon = '😄';
+                            analysis.title = 'สบายดีมาก';
+                          }
+                        }
+                      });
+
+                      // วิเคราะห์จาก concerns
+                      if (concerns.length > 0) {
+                        analysis.status = 'warning';
+                        concerns.forEach((c: string) => {
+                          analysis.issues.push(`⚠️ ${c}`);
+                        });
+                      }
+
+                      // ปรับ title ตาม status
+                      if (analysis.status === 'warning' && analysis.title === 'สบายดี') {
+                        analysis.title = 'ต้องติดตาม';
+                        analysis.icon = '😐';
+                      } else if (analysis.status === 'danger') {
+                        analysis.title = 'ต้องดูแลเร่งด่วน';
+                        analysis.icon = '😰';
+                      }
+
+                      return analysis;
+                    };
+
+                    const healthAnalysis = analyzeHealth();
+                    
+                    return (
+                      <div
+                        key={report.id}
+                        className="p-5 bg-purple-50 rounded-2xl border border-purple-200 hover:shadow-lg transition-all"
+                      >
+                        {/* Header */}
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <h4 className="font-bold text-gray-800 text-base">
+                                {report.title || 'รายงานประจำวัน'}
+                              </h4>
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                                report.status === 'read' 
+                                  ? 'bg-gray-100 text-gray-600' 
+                                  : 'bg-blue-100 text-blue-600'
+                              }`}>
+                                {report.status === 'read' ? '✓' : 'ใหม่'}
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-500">
+                              📅 {isValidDate 
+                                ? dateObj.toLocaleDateString('th-TH', {
+                                    year: 'numeric',
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })
+                                : 'ไม่ระบุวันที่'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Health Analysis - แสดงก่อน Summary */}
+                        <div className={`p-4 rounded-xl mb-3 border-2 ${
+                          healthAnalysis.status === 'danger' 
+                            ? 'bg-red-50 border-red-300' 
+                            : healthAnalysis.status === 'warning'
+                            ? 'bg-yellow-50 border-yellow-300'
+                            : 'bg-green-50 border-green-300'
+                        }`}>
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-2xl">{healthAnalysis.icon}</span>
+                            <div className="flex-1">
+                              <h5 className={`font-bold text-sm ${
+                                healthAnalysis.status === 'danger' ? 'text-red-700' :
+                                healthAnalysis.status === 'warning' ? 'text-yellow-700' :
+                                'text-green-700'
+                              }`}>
+                                สถานะสุขภาพ: {healthAnalysis.title}
+                              </h5>
+                              <p className="text-xs text-gray-600">
+                                วิเคราะห์จากข้อมูลที่ผู้ดูแลส่ง
+                              </p>
+                            </div>
+                          </div>
+                          
+                          {/* แสดงปัญหาที่พบ */}
+                          {healthAnalysis.issues.length > 0 && (
+                            <div className="mt-2 p-2 bg-white rounded-lg">
+                              <p className="text-xs font-bold text-gray-700 mb-1">พบอาการ:</p>
+                              <div className="space-y-0.5">
+                                {healthAnalysis.issues.map((issue, idx) => (
+                                  <p key={idx} className="text-xs text-gray-700">{issue}</p>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* แสดงคำแนะนำ */}
+                          {healthAnalysis.recommendations.length > 0 && (
+                            <div className="mt-2 p-2 bg-white rounded-lg">
+                              <p className="text-xs font-bold text-blue-700 mb-1">💡 คำแนะนำ:</p>
+                              <div className="space-y-0.5">
+                                {healthAnalysis.recommendations.map((rec, idx) => (
+                                  <p key={idx} className="text-xs text-blue-700">{rec}</p>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Summary */}
+                        <div className="bg-white p-3 rounded-xl mb-3 border border-purple-100">
+                          <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">
+                            {report.summary || 'ไม่มีข้อมูล'}
+                          </p>
+                        </div>
+
+                        {/* Stats */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-3 rounded-xl text-white">
+                            <p className="text-xs opacity-90 mb-1">📋 งานที่ทำ</p>
+                            <p className="text-2xl font-bold">
+                              {report.tasksCompleted}/{report.tasksTotal}
+                            </p>
+                          </div>
+                          <div className="bg-gradient-to-br from-orange-500 to-orange-600 p-3 rounded-xl text-white">
+                            <p className="text-xs opacity-90 mb-1">💰 ค่าใช้จ่าย</p>
+                            <p className="text-2xl font-bold">
+                              {Number(report.expenseTotal || 0).toLocaleString()}
+                            </p>
+                            <p className="text-xs opacity-90">บาท</p>
+                          </div>
+                        </div>
+
+                        {/* Highlights */}
+                        {report.highlights && report.highlights.length > 0 && (
+                          <div className="bg-green-50 p-3 rounded-xl mt-2 border border-green-200">
+                            <p className="text-xs font-bold text-green-700 mb-2">😊 สิ่งที่สังเกต</p>
+                            <div className="space-y-1">
+                              {report.highlights.slice(0, 3).map((highlight: string, idx: number) => (
+                                <p key={idx} className="text-xs text-green-800">• {highlight}</p>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Concerns */}
+                        {report.concerns && report.concerns.length > 0 && (
+                          <div className="bg-red-50 p-3 rounded-xl mt-2 border border-red-200">
+                            <p className="text-xs font-bold text-red-700 mb-2">⚠️ สิ่งที่ต้องดูแล</p>
+                            <div className="space-y-1">
+                              {report.concerns.map((concern: string, idx: number) => (
+                                <p key={idx} className="text-xs text-red-800">• {concern}</p>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Contact Caregiver */}
@@ -2264,6 +2889,57 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                         </div>
                       </div>
                     )}
+
+                    {/* Attendance Today */}
+                    {(() => {
+                      const todayAttendance = getTodayAttendance(caregiver.id);
+                      return (
+                        <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl p-3 mb-3 border border-blue-200">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <p className="text-xs text-blue-700 font-medium mb-2">
+                                สถานะการทำงานวันนี้
+                              </p>
+                              <div className="space-y-1">
+                                {todayAttendance ? (
+                                  <>
+                                    <div className="flex items-center gap-2">
+                                      {getAttendanceStatusBadge(todayAttendance.status)}
+                                    </div>
+                                    {todayAttendance.checkInTime && (
+                                      <div className="flex items-center gap-2 text-sm text-gray-700">
+                                        <Clock size={14} className="text-green-600" />
+                                        <span>เข้างาน: {formatTime(todayAttendance.checkInTime)}</span>
+                                      </div>
+                                    )}
+                                    {todayAttendance.checkOutTime && (
+                                      <div className="flex items-center gap-2 text-sm text-gray-700">
+                                        <Clock size={14} className="text-red-600" />
+                                        <span>ออกงาน: {formatTime(todayAttendance.checkOutTime)}</span>
+                                      </div>
+                                    )}
+                                    {todayAttendance.hoursWorked > 0 && (
+                                      <div className="text-xs text-gray-600 mt-1">
+                                        ทำงาน: {todayAttendance.hoursWorked.toFixed(1)} ชั่วโมง
+                                      </div>
+                                    )}
+                                  </>
+                                ) : (
+                                  <span className="text-sm text-gray-600">ยังไม่มีข้อมูลการเข้างานวันนี้</span>
+                                )}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => setSelectedCaregiverForAttendance(caregiver.id)}
+                              className="bg-white hover:bg-blue-50 p-3 rounded-xl transition-colors border border-blue-200 active:scale-95"
+                              title="ดูประวัติการทำงาน"
+                            >
+                              <Clock size={20} className="text-blue-600" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* รายละเอียดเพิ่มเติม - Collapsible */}
                     <details className="group">
@@ -3365,48 +4041,72 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
         {activeTab === "health" && selectedElder && (
           <div className="animate-in fade-in duration-300">
             <div className="space-y-6">
-              {/* Mood Overview from Daily Reports */}
+              {/* Mood & Observation Notes */}
               <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-3xl p-6 shadow-sm border border-purple-100">
                 <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
                   <Heart className="text-purple-600" size={24} />
-                  อารมณ์ของ{selectedElder.name}
+                  บันทึกอาการและอารมณ์
                 </h3>
-                {loadingReports ? (
+                {loadingHealth ? (
                   <div className="text-center py-4">
                     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-600 mx-auto"></div>
                     <p className="mt-2 text-sm text-gray-500">กำลังโหลด...</p>
                   </div>
-                ) : (
-                  <div className="grid grid-cols-3 gap-3">
-                    {(() => {
-                      const moodCounts = { happy: 0, neutral: 0, sad: 0 };
-                      reports.forEach(r => {
-                        if (r.overallMood === 'happy') moodCounts.happy++;
-                        else if (r.overallMood === 'sad') moodCounts.sad++;
-                        else if (r.overallMood === 'neutral') moodCounts.neutral++;
-                      });
-                      return (
-                        <>
-                          <div className="bg-white rounded-2xl p-4 text-center">
-                            <div className="text-3xl mb-2">😊</div>
-                            <p className="text-2xl font-bold text-green-600">{moodCounts.happy}</p>
-                            <p className="text-xs text-gray-500">วันที่แจ่มใส</p>
+                ) : (() => {
+                  const observations = getObservationRecords();
+                  return observations.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <Heart size={48} className="mx-auto mb-2 opacity-20" />
+                      <p>ยังไม่มีบันทึกอาการ</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {observations.map((record) => (
+                        <div
+                          key={record.id}
+                          className="bg-white rounded-2xl p-4 border border-purple-100 shadow-sm"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="flex-shrink-0">
+                              {record.observation?.includes('อารมณ์ดี') ? (
+                                <span className="text-3xl">😊</span>
+                              ) : record.observation?.includes('ซึม') ? (
+                                <span className="text-3xl">😐</span>
+                              ) : record.observation?.includes('หงุดหงิด') ? (
+                                <span className="text-3xl">😠</span>
+                              ) : record.observation?.includes('นอนไม่หลับ') ? (
+                                <span className="text-3xl">😴</span>
+                              ) : (
+                                <span className="text-3xl">📝</span>
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-gray-800 font-medium mb-1">
+                                {record.observation}
+                              </p>
+                              {record.notes && record.notes !== record.observation && (
+                                <p className="text-sm text-gray-600 italic">
+                                  {record.notes}
+                                </p>
+                              )}
+                              <div className="flex justify-between items-center mt-2 text-xs text-gray-500">
+                                <span>บันทึกโดย: {record.caregiver?.name || 'ผู้ดูแล'}</span>
+                                <span>
+                                  {new Date(record.recordedAt).toLocaleDateString('th-TH', {
+                                    day: 'numeric',
+                                    month: 'short',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </span>
+                              </div>
+                            </div>
                           </div>
-                          <div className="bg-white rounded-2xl p-4 text-center">
-                            <div className="text-3xl mb-2">😐</div>
-                            <p className="text-2xl font-bold text-yellow-600">{moodCounts.neutral}</p>
-                            <p className="text-xs text-gray-500">วันที่ปกติ</p>
-                          </div>
-                          <div className="bg-white rounded-2xl p-4 text-center">
-                            <div className="text-3xl mb-2">😔</div>
-                            <p className="text-2xl font-bold text-red-600">{moodCounts.sad}</p>
-                            <p className="text-xs text-gray-500">วันที่ไม่สบายใจ</p>
-                          </div>
-                        </>
-                      );
-                    })()}
-                  </div>
-                )}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Latest Health Record */}

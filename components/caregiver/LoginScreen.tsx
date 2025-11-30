@@ -63,12 +63,32 @@ export default function LoginScreen({ onLoginSuccess }: Props) {
           onLoginSuccess(password); // ส่งรหัสจับคู่ไปหน้า Pairing
         }, 1000);
       } else {
-        setAlert({
-          isOpen: true,
-          title: "เบอร์โทรไม่ถูกต้อง",
-          message: loginData.message || "ไม่พบเบอร์โทรศัพท์นี้ในระบบ",
-          type: "error",
-        });
+        // จัดการ error ตาม status code
+        if (loginRes.status === 404) {
+          // ไม่พบเบอร์ในระบบ
+          setAlert({
+            isOpen: true,
+            title: "ไม่พบเบอร์โทรศัพท์",
+            message: loginData.message || "ไม่พบเบอร์โทรศัพท์นี้ในระบบ\nกรุณาแจ้งครอบครัวเพื่อเพิ่มข้อมูลคุณ",
+            type: "error",
+          });
+        } else if (loginRes.status === 403) {
+          // ยังไม่ได้รับการยืนยัน
+          setAlert({
+            isOpen: true,
+            title: "รอการยืนยันตัวตน",
+            message: loginData.message || "บัญชีของคุณยังไม่ได้รับการยืนยันจากครอบครัว\nกรุณารอการอนุมัติหรือติดต่อครอบครัว",
+            type: "info",
+          });
+        } else {
+          // ข้อผิดพลาดอื่นๆ
+          setAlert({
+            isOpen: true,
+            title: "เข้าสู่ระบบไม่สำเร็จ",
+            message: loginData.message || "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง",
+            type: "error",
+          });
+        }
       }
     } catch (error) {
       setAlert({

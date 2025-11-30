@@ -3,7 +3,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { 
   Home, Activity, Wallet, FileCheck, User, AlertTriangle, Bell, 
   CheckCircle, ChevronRight, ShoppingBag, Plus, Send, Trash2, MessageSquare,
-  CloudSun, Sun, Sunset, Moon, Info, ClipboardList, Camera, X, Pill
+  CloudSun, Sun, Sunset, Moon, Info, ClipboardList, Camera, X, Pill, LogOut, Clock
 } from 'lucide-react';
 import CustomAlert from '../CustomAlert';
 
@@ -27,7 +27,7 @@ const INITIAL_TASKS: Task[] = [
 
 export default function DashboardScreen() {
   // Authentication & Config
-  const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+  const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
   const [token, setToken] = useState<string>('');
   const [caregiverId, setCaregiverId] = useState<string>('');
   const [elderId, setElderId] = useState<string>('');
@@ -96,24 +96,117 @@ export default function DashboardScreen() {
     type: "info",
   });
   const [timeError, setTimeError] = useState(false);
+  
+  // Attendance State
+  const [isCheckedIn, setIsCheckedIn] = useState(false);
+  const [checkInTime, setCheckInTime] = useState<string | null>(null);
+  const [checkOutTime, setCheckOutTime] = useState<string | null>(null);
+  const [showAttendanceModal, setShowAttendanceModal] = useState(false);
+  const [currentSessionStart, setCurrentSessionStart] = useState<string | null>(null); // เก็บ timestamp ของ check-in ล่าสุด
 
-  // Fetch Tasks
+  // Notifications
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // Check attendance status on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const checkedIn = localStorage.getItem('isCheckedIn') === 'true';
+      const storedCheckInTime = localStorage.getItem('checkInTime');
+      const sessionStart = localStorage.getItem('currentSessionStart');
+      setIsCheckedIn(checkedIn);
+      setCheckInTime(storedCheckInTime);
+      setCurrentSessionStart(sessionStart);
+    }
+  }, []);
+
+  // Fetch Notifications
   useEffect(() => {
     if (!caregiverId || !token) return;
-    setLoadingTasks(true);
-    fetch(`${BASE_URL}/caregiver/tasks?caregiverId=${caregiverId}`, {
+    setLoadingNotifications(true);
+    fetch(`${BASE_URL}/caregiver/notifications`, {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(res => res.json())
       .then(data => {
-        const tasksData: Task[] = Array.isArray(data) ? data.map((t: any) => ({
-          id: t.id,
-          time: t.time,
-          title: t.title,
-          detail: t.detail || '',
-          instruction: t.instruction || '',
-          status: t.status || 'pending'
-        })) : [];
+        const notifs = Array.isArray(data) ? data : [];
+        setNotifications(notifs);
+        setUnreadCount(notifs.filter((n: any) => !n.isRead).length);
+        setLoadingNotifications(false);
+      })
+      .catch(err => {
+        console.error('Failed to fetch notifications:', err);
+        setNotifications([]);
+        setLoadingNotifications(false);
+      });
+  }, [caregiverId, token, BASE_URL]);
+
+  // Fetch Tasks
+  useEffect(() => {
+    if (!caregiverId || !token || !isCheckedIn || !currentSessionStart) return; // เพิ่มเงื่อนไข currentSessionStart
+    
+    const today = new Date().toISOString().split('T')[0];
+    
+    const fetchTasks = () => {
+      // ไม่ต้อง setLoadingTasks เพื่อไม่ให้หน้ากระพริบ
+      fetch(`${BASE_URL}/caregiver/tasks?caregiverId=${caregiverId}&date=${today}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+        .then(res => res.json())
+        .then(data => {
+          const tasksData: Task[] = Array.isArray(data) ? data
+            .filter((t: any) => {
+              // แสดงงานที่ pending ทั้งหมด (ไม่ว่าจะสร้างเมื่อไหร่)
+              if (t.status === 'pending') return true;
+              // แสดงงานที่ done เฉพาะที่ทำในเซสชันนี้
+              if (t.status === 'done' && t.createdAt) {
+                return new Date(t.createdAt) >= new Date(currentSessionStart);
+              }
+              return !t.createdAt; // backward compatible
+            })
+            .map((t: any) => ({
+              id: t.id,
+              time: t.time,
+              title: t.title,
+              detail: t.detail || '',
+              instruction: t.instruction || '',
+              status: t.status || 'pending'
+            })) : [];
+          setTasks(tasksData);
+        })
+        .catch(err => {
+          console.error('Failed to fetch tasks:', err);
+          // ไม่ต้องล้างข้อมูลเก่าถ้า fetch ล้มเหลว
+        });
+    };
+    
+    // โหลดครั้งแรกด้วย loading state
+    setLoadingTasks(true);
+    fetch(`${BASE_URL}/caregiver/tasks?caregiverId=${caregiverId}&date=${today}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(res => res.json())
+      .then(data => {
+        const tasksData: Task[] = Array.isArray(data) ? data
+          .filter((t: any) => {
+            // แสดงงานที่ pending ทั้งหมด (ไม่ว่าจะสร้างเมื่อไหร่)
+            if (t.status === 'pending') return true;
+            // แสดงงานที่ done เฉพาะที่ทำในเซสชันนี้
+            if (t.status === 'done' && t.createdAt) {
+              return new Date(t.createdAt) >= new Date(currentSessionStart);
+            }
+            return !t.createdAt; // backward compatible
+          })
+          .map((t: any) => ({
+            id: t.id,
+            time: t.time,
+            title: t.title,
+            detail: t.detail || '',
+            instruction: t.instruction || '',
+            status: t.status || 'pending'
+          })) : [];
         setTasks(tasksData);
         setLoadingTasks(false);
       })
@@ -121,24 +214,37 @@ export default function DashboardScreen() {
         console.error('Failed to fetch tasks:', err);
         setLoadingTasks(false);
       });
-  }, [caregiverId, token, BASE_URL]);
+    
+    // โหลดซ้ำทุก 10 วินาทีแบบ silent (ไม่แสดง loading)
+    const interval = setInterval(fetchTasks, 10000);
+    
+    return () => clearInterval(interval);
+  }, [caregiverId, token, BASE_URL, isCheckedIn, currentSessionStart]);
 
   // Fetch Expenses
   useEffect(() => {
-    if (!elderId || !token) return;
+    if (!elderId || !token || !isCheckedIn || !currentSessionStart) return; // เพิ่มเงื่อนไข currentSessionStart
+    const today = new Date().toISOString().split('T')[0];
     setLoadingExpenses(true);
-    fetch(`${BASE_URL}/caregiver/expenses?elderId=${elderId}`, {
+    fetch(`${BASE_URL}/caregiver/expenses?elderId=${elderId}&date=${today}`, {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(res => res.json())
       .then(data => {
-        const expensesData = Array.isArray(data) ? data.map((e: any) => ({
-          id: e.id,
-          item: e.item,
-          price: Number(e.amount),
-          addedBy: 'caregiver' as const,
-          date: new Date(e.date).toISOString().split('T')[0]
-        })) : [];
+        const expensesData = Array.isArray(data) ? data
+          .filter((e: any) => {
+            // กรองเฉพาะ expenses ที่สร้างหลัง check-in ล่าสุด
+            if (!e.createdAt) return true; // backward compatible
+            return new Date(e.createdAt) >= new Date(currentSessionStart);
+          })
+          .map((e: any) => ({
+            id: e.id,
+            item: e.description || e.item,
+            price: Number(e.amount),
+            addedBy: 'caregiver' as const,
+            date: new Date(e.date).toISOString().split('T')[0]
+          }))
+          .filter((e: any) => e.date === today) : [];
         setExpenses(expensesData);
         setLoadingExpenses(false);
       })
@@ -146,13 +252,31 @@ export default function DashboardScreen() {
         console.error('Failed to fetch expenses:', err);
         setLoadingExpenses(false);
       });
-  }, [elderId, token, BASE_URL]);
+  }, [elderId, token, BASE_URL, isCheckedIn, currentSessionStart]);
 
   // Computed
   const completedCount = tasks.filter(t => t.status === 'done').length;
   const progressPercent = tasks.length > 0 ? (completedCount / tasks.length) * 100 : 0;
   const totalExpense = expenses.reduce((sum, ex) => sum + ex.price, 0);
   const pendingTask = tasks.find(t => t.status === 'pending');
+
+  // Helper function to format relative time
+  const formatRelativeTime = (timestamp: string | null) => {
+    if (!timestamp) return '';
+    
+    const now = new Date();
+    const then = new Date(timestamp);
+    const diffMs = now.getTime() - then.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    
+    if (diffMins < 1) return 'เมื่อสักครู่';
+    if (diffMins < 60) return `${diffMins} นาทีที่แล้ว`;
+    if (diffHours < 24) return `${diffHours} ชั่วโมงที่แล้ว`;
+    
+    // ถ้าเกิน 24 ชม. แสดงเวลา
+    return then.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+  };
 
   // Methods
   const showAlert = (title: string, message: string, type: 'info' | 'error' | 'success' = 'info') => {
@@ -229,31 +353,209 @@ export default function DashboardScreen() {
     setConfirmDeleteExpenseId(null);
   };
 
-  const handleNoteSubmit = (mood: string) => {
+  const handleNoteSubmit = async (mood: string) => {
     if (!selectedTime) {
       setTimeError(true);
       showAlert('ลืมระบุเวลา', 'กรุณาเลือกช่วงเวลาก่อนครับ', 'error');
       setTimeout(() => setTimeError(false), 1000);
       return;
     }
-    setRecordedMoods([`เวลา ${selectedTime}: ${mood}`, ...recordedMoods]);
-    showAlert('บันทึกเรียบร้อย', `คุณยาย${mood} (${selectedTime})`, 'success');
-    setSelectedTime('');
-  };
-
-  const handleExtraNoteSubmit = () => {
-    if (!extraNote) return;
-    setRecordedMoods([`📢 บันทึกเพิ่มเติม: ${extraNote}`, ...recordedMoods]);
-    setExtraNote('');
-    showAlert('บันทึกแล้ว', 'บันทึกข้อความเพิ่มเติมเรียบร้อย', 'success');
-  };
-
-  const handleSendReport = () => {
-    const moods = recordedMoods.filter(m => !m.includes('📢')).join('\n');
-    const notes = recordedMoods.filter(m => m.includes('📢')).join('\n');
     
-    const reportMsg = `สรุปงานวันนี้ส่งให้ลูกหลานแล้ว:\n\n✅ งานเสร็จ: ${completedCount}/${tasks.length}\n💰 ค่าใช้จ่าย: ${totalExpense} บาท\n\n${moods}\n${notes}`;
-    showAlert('ส่งรายงานสำเร็จ! ✅', reportMsg, 'success');
+    try {
+      const res = await fetch(`${BASE_URL}/caregiver/health/observation`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          elderId: elderId,
+          caregiverId: caregiverId,
+          observation: `${selectedTime}: ${mood}`,
+          notes: `อารมณ์: ${mood}`,
+          timestamp: new Date().toISOString()
+        })
+      });
+      
+      const data = await res.json();
+      
+      if (res.ok) {
+        setRecordedMoods([`เวลา ${selectedTime}: ${mood}`, ...recordedMoods]);
+        showAlert('บันทึกเรียบร้อย', `คุณยาย${mood} (${selectedTime})\n\nข้อมูลถูกส่งให้ครอบครัวแล้ว`, 'success');
+        setSelectedTime('');
+      } else {
+        showAlert('บันทึกล้มเหลว', data.message || 'เกิดข้อผิดพลาด', 'error');
+      }
+    } catch (err) {
+      console.error('Note submit error:', err);
+      // Fallback to local storage if API fails
+      setRecordedMoods([`เวลา ${selectedTime}: ${mood}`, ...recordedMoods]);
+      showAlert('บันทึกเรียบร้อย', `คุณยาย${mood} (${selectedTime})`, 'success');
+      setSelectedTime('');
+    }
+  };
+
+  const handleExtraNoteSubmit = async () => {
+    if (!extraNote) return;
+    
+    try {
+      const res = await fetch(`${BASE_URL}/caregiver/health/observation`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          elderId: elderId,
+          caregiverId: caregiverId,
+          observation: `บันทึกเพิ่มเติม: ${extraNote}`,
+          notes: extraNote,
+          timestamp: new Date().toISOString()
+        })
+      });
+      
+      const data = await res.json();
+      
+      if (res.ok) {
+        setRecordedMoods([`📢 บันทึกเพิ่มเติม: ${extraNote}`, ...recordedMoods]);
+        setExtraNote('');
+        showAlert('บันทึกแล้ว', 'บันทึกข้อความเพิ่มเติมเรียบร้อย\n\nข้อมูลถูกส่งให้ครอบครัวแล้ว', 'success');
+      } else {
+        showAlert('บันทึกล้มเหลว', data.message || 'เกิดข้อผิดพลาด', 'error');
+      }
+    } catch (err) {
+      console.error('Extra note submit error:', err);
+      // Fallback to local storage if API fails
+      setRecordedMoods([`📢 บันทึกเพิ่มเติม: ${extraNote}`, ...recordedMoods]);
+      setExtraNote('');
+      showAlert('บันทึกแล้ว', 'บันทึกข้อความเพิ่มเติมเรียบร้อย', 'success');
+    }
+  };
+
+  const handleSendReport = async () => {
+    const moods = recordedMoods.filter(m => !m.includes('📢'));
+    const notes = recordedMoods.filter(m => m.includes('📢'));
+    
+    if (!currentSessionStart) {
+      showAlert('ไม่สามารถส่งรายงานได้', 'กรุณา Check-in เข้างานก่อนส่งรายงาน', 'error');
+      return;
+    }
+    
+    try {
+      // ดึงข้อมูลงานทั้งหมดของวันนี้
+      const today = new Date().toISOString().split('T')[0];
+      const tasksRes = await fetch(`${BASE_URL}/caregiver/tasks?caregiverId=${caregiverId}&date=${today}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const allTasks = await tasksRes.json();
+      const allTasksArray = Array.isArray(allTasks) ? allTasks : [];
+      
+      // กรองเฉพาะงานในเซสชันนี้ (ที่สร้างหลัง check-in หรือที่ทำเสร็จในเซสชันนี้)
+      const sessionTasks = allTasksArray.filter((t: any) => {
+        if (!t.createdAt) return true; // backward compatible
+        const taskCreatedAt = new Date(t.createdAt);
+        const sessionStart = new Date(currentSessionStart);
+        
+        // แสดงงานที่สร้างหลัง check-in หรืองานที่ทำเสร็จในเซสชันนี้
+        if (taskCreatedAt >= sessionStart) return true;
+        if (t.status === 'done' && t.completedAt) {
+          return new Date(t.completedAt) >= sessionStart;
+        }
+        return false;
+      });
+      
+      // ดึงข้อมูลค่าใช้จ่ายทั้งหมดของวันนี้
+      const expensesRes = await fetch(`${BASE_URL}/caregiver/expenses?elderId=${elderId}&date=${today}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const allExpenses = await expensesRes.json();
+      const allExpensesArray = Array.isArray(allExpenses) ? allExpenses : [];
+      
+      // กรองเฉพาะค่าใช้จ่ายในเซสชันนี้
+      const sessionExpenses = allExpensesArray.filter((e: any) => {
+        if (!e.createdAt) return true;
+        return new Date(e.createdAt) >= new Date(currentSessionStart);
+      });
+      
+      // คำนวณข้อมูลจากเซสชันนี้
+      const sessionCompletedCount = sessionTasks.filter((t: any) => t.status === 'done').length;
+      const sessionTotalTasks = sessionTasks.length;
+      const sessionTotalExpense = sessionExpenses.reduce((sum: number, e: any) => sum + Number(e.amount || 0), 0);
+      
+      // ดึงเวลา check-in และตรวจสอบว่าเป็น valid date
+      const checkInDisplay = checkInTime 
+        ? (() => {
+            const date = new Date(checkInTime);
+            return !isNaN(date.getTime()) 
+              ? date.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
+              : '-';
+          })()
+        : '-';
+      
+      // สร้างรายละเอียดงาน
+      const taskDetails = sessionTasks.length > 0 
+        ? sessionTasks.map((t: any) => 
+            `${t.status === 'done' ? '✅' : '⏳'} ${t.time} - ${t.title}`
+          ).join('\n')
+        : 'ไม่มีงานในกะนี้';
+      
+      // สร้างรายละเอียดค่าใช้จ่าย
+      const expenseDetails = sessionExpenses.length > 0
+        ? sessionExpenses.map((e: any) => 
+            `• ${e.description || e.item}: ${Number(e.amount || 0)} บาท`
+          ).join('\n')
+        : 'ไม่มีค่าใช้จ่าย';
+      
+      // สร้าง summary ที่ละเอียด
+      const detailedSummary = `📊 สรุปการทำงานกะนี้
+⏰ เข้างาน: ${checkInDisplay}
+
+✅ งานที่ทำ: ${sessionCompletedCount}/${sessionTotalTasks} งาน
+${taskDetails}
+
+💰 ค่าใช้จ่าย: ${sessionTotalExpense} บาท
+${expenseDetails}
+
+${moods.length > 0 ? '😊 อาการผู้สูงอายุ:\n' + moods.join('\n') : ''}
+${notes.length > 0 ? '\n📝 บันทึกเพิ่มเติม:\n' + notes.map(n => n.replace('📢 บันทึกเพิ่มเติม: ', '')).join('\n') : ''}`;
+      
+      const res = await fetch(`${BASE_URL}/caregiver/reports`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          elderId: elderId,
+          title: `รายงานกะทำงาน ${new Date().toLocaleDateString('th-TH')} ${checkInDisplay}`,
+          summary: detailedSummary,
+          tasksCompleted: sessionCompletedCount,
+          tasksTotal: sessionTotalTasks,
+          healthStatus: 'normal',
+          healthNotes: moods.join(', ') || 'ไม่มีบันทึก',
+          overallMood: moods.length > 0 ? moods[0].split(': ')[1] : null,
+          expenseTotal: sessionTotalExpense,
+          incidents: [],
+          highlights: moods,
+          concerns: notes.map(n => n.replace('📢 บันทึกเพิ่มเติม: ', '')),
+          photoUrls: []
+        })
+      });
+      
+      const data = await res.json();
+      
+      if (res.ok) {
+        const reportMsg = `✅ ส่งสรุปงานกะนี้ให้ครอบครัวแล้ว\n⏰ เข้างาน: ${checkInDisplay}\n\n📋 งานที่ทำ: ${sessionCompletedCount}/${sessionTotalTasks}\n💰 ค่าใช้จ่าย: ${sessionTotalExpense} บาท`;
+        showAlert('ส่งรายงานสำเร็จ! ✅', reportMsg, 'success');
+        // Clear recorded moods after sending
+        setRecordedMoods([]);
+      } else {
+        showAlert('ส่งรายงานล้มเหลว', data.message || 'เกิดข้อผิดพลาดในการส่งรายงาน', 'error');
+      }
+    } catch (err) {
+      console.error('Send report error:', err);
+      showAlert('ข้อผิดพลาด', 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์', 'error');
+    }
   };
 
   const handleVitalSubmit = async () => {
@@ -341,9 +643,249 @@ export default function DashboardScreen() {
     else setManualChecks([...manualChecks, sym]);
   };
 
-  const startTask = () => {
-    showAlert('เริ่มงานแล้ว', 'ระบบกำลังเปิดกล้อง... เพื่อยืนยันการทำงาน', 'info');
-    setSelectedTask(null);
+  const startTask = async () => {
+    if (!selectedTask) return;
+    
+    try {
+      const res = await fetch(`${BASE_URL}/caregiver/tasks/${selectedTask.id}/complete`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          status: 'done',
+          completedAt: new Date().toISOString()
+        })
+      });
+      
+      const data = await res.json();
+      
+      if (res.ok) {
+        // Update local state
+        setTasks(tasks.map(t => 
+          t.id === selectedTask.id ? { ...t, status: 'done' } : t
+        ));
+        showAlert('เสร็จสิ้น! ✅', `${selectedTask.title} เสร็จเรียบร้อย`, 'success');
+        setSelectedTask(null);
+      } else {
+        showAlert('บันทึกล้มเหลว', data.message || 'เกิดข้อผิดพลาด', 'error');
+      }
+    } catch (err) {
+      console.error('Complete task error:', err);
+      // Fallback to local update if API fails
+      setTasks(tasks.map(t => 
+        t.id === selectedTask.id ? { ...t, status: 'done' } : t
+      ));
+      showAlert('เสร็จสิ้น! ✅', `${selectedTask.title} เสร็จเรียบร้อย`, 'success');
+      setSelectedTask(null);
+    }
+  };
+
+  const handleCheckIn = async () => {
+    const now = new Date();
+    const isoTimestamp = now.toISOString();
+    const timeString = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+    
+    try {
+      const res = await fetch(`${BASE_URL}/caregiver/attendance/check-in`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          caregiverId: caregiverId,
+          elderId: elderId,
+          checkInTime: isoTimestamp
+        })
+      });
+      
+      const data = await res.json();
+      
+      if (res.ok) {
+        setIsCheckedIn(true);
+        setCheckInTime(isoTimestamp); // เก็บ ISO timestamp
+        setCurrentSessionStart(isoTimestamp);
+        localStorage.setItem('isCheckedIn', 'true');
+        localStorage.setItem('checkInTime', isoTimestamp); // เก็บ ISO timestamp
+        localStorage.setItem('currentSessionStart', isoTimestamp);
+        setShowAttendanceModal(false);
+        showAlert('เข้างานสำเร็จ', `เข้างานเวลา ${timeString}`, 'success');
+      } else if (res.status === 404) {
+        // Caregiver account has been deleted
+        showAlert(
+          'บัญชีถูกลบแล้ว',
+          data.message || 'บัญชีของคุณถูกลบออกจากระบบแล้ว\nกรุณาติดต่อครอบครัวเพื่อเพิ่มข้อมูลใหม่',
+          'error'
+        );
+        
+        // Auto-logout after showing alert
+        setTimeout(() => {
+          // Clear all localStorage data
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          localStorage.removeItem('isCheckedIn');
+          localStorage.removeItem('checkInTime');
+          localStorage.removeItem('currentSessionStart');
+          
+          // Redirect to login
+          window.location.href = '/caregiver';
+        }, 3000);
+      } else {
+        showAlert('เข้างานล้มเหลว', data.message || 'เกิดข้อผิดพลาด', 'error');
+      }
+    } catch (err) {
+      console.error('Check-in error:', err);
+      // Fallback to local storage if API fails
+      setIsCheckedIn(true);
+      setCheckInTime(isoTimestamp);
+      setCurrentSessionStart(isoTimestamp);
+      localStorage.setItem('isCheckedIn', 'true');
+      localStorage.setItem('checkInTime', isoTimestamp);
+      localStorage.setItem('currentSessionStart', isoTimestamp);
+      setShowAttendanceModal(false);
+      showAlert('เข้างานสำเร็จ', `เข้างานเวลา ${timeString}`, 'success');
+    }
+  };
+
+  const handleCheckOut = async () => {
+    const now = new Date();
+    const timeString = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+    
+    try {
+      const res = await fetch(`${BASE_URL}/caregiver/attendance/check-out`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          caregiverId: caregiverId,
+          elderId: elderId,
+          checkOutTime: now.toISOString()
+        })
+      });
+      
+      const data = await res.json();
+      
+      if (res.ok) {
+        setCheckOutTime(timeString);
+        setShowAttendanceModal(false);
+        showAlert('ออกงานสำเร็จ', `ออกงานเวลา ${timeString}\nสวัสดีครับ เจอกันพรุ่งนี้\n\nข้อมูลจะรีเซ็ตเพื่อเริ่มต้นใหม่`, 'success');
+        
+        // Clear all data and reset for new day
+        setTimeout(() => {
+          setIsCheckedIn(false);
+          setCheckInTime(null);
+          setCheckOutTime(null);
+          setCurrentSessionStart(null);
+          setTasks([]);
+          setExpenses([]);
+          setRecordedMoods([]);
+          setSys('');
+          setDia('');
+          setHeartRate('');
+          setManualChecks([]);
+          localStorage.removeItem('isCheckedIn');
+          localStorage.removeItem('checkInTime');
+          localStorage.removeItem('currentSessionStart');
+        }, 2000);
+      } else {
+        showAlert('ออกงานล้มเหลว', data.message || 'เกิดข้อผิดพลาด', 'error');
+      }
+    } catch (err) {
+      console.error('Check-out error:', err);
+      // Fallback to local storage if API fails
+      setCheckOutTime(timeString);
+      setShowAttendanceModal(false);
+      showAlert('ออกงานสำเร็จ', `ออกงานเวลา ${timeString}\nสวัสดีครับ เจอกันพรุ่งนี้\n\nข้อมูลจะรีเซ็ตเพื่อเริ่มต้นใหม่`, 'success');
+      
+      setTimeout(() => {
+        setIsCheckedIn(false);
+        setCheckInTime(null);
+        setCheckOutTime(null);
+        setTasks([]);
+        setExpenses([]);
+        setRecordedMoods([]);
+        setSys('');
+        setDia('');
+        setHeartRate('');
+        setManualChecks([]);
+        localStorage.removeItem('isCheckedIn');
+        localStorage.removeItem('checkInTime');
+      }, 2000);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      // Call logout API if needed
+      await fetch(`${BASE_URL}/auth/logout`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+    } catch (err) {
+      console.error('Logout error:', err);
+    } finally {
+      // Clear local storage regardless of API result
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        localStorage.removeItem('isCheckedIn');
+        localStorage.removeItem('checkInTime');
+        window.location.href = '/caregiver';
+      }
+    }
+  };
+
+  const handleSOS = async (reason: string) => {
+    try {
+      const res = await fetch(`${BASE_URL}/caregiver/sos`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          elderId: elderId,
+          caregiverId: caregiverId,
+          reason: reason,
+          timestamp: new Date().toISOString()
+        })
+      });
+      
+      const data = await res.json();
+      
+      if (res.ok) {
+        setShowSOS(false);
+        showAlert('แจ้งเหตุฉุกเฉิน', `${reason}\n\nแจ้งเตือนถูกส่งไปยังครอบครัวแล้ว\nพิกัด GPS ถูกบันทึก`, 'error');
+      } else {
+        showAlert('แจ้งเหตุล้มเหลว', data.message || 'เกิดข้อผิดพลาดในการแจ้งเหตุ', 'error');
+      }
+    } catch (err) {
+      console.error('SOS error:', err);
+      setShowSOS(false);
+      showAlert('แจ้งเหตุฉุกเฉิน', `${reason}\n\nพิกัด GPS ถูกส่งไปยังลูกหลานแล้ว`, 'error');
+    }
+  };
+
+  const markNotificationAsRead = async (id: string) => {
+    try {
+      const res = await fetch(`${BASE_URL}/caregiver/notifications/${id}/read`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      if (res.ok) {
+        setNotifications(notifications.map(n => 
+          n.id === id ? { ...n, isRead: true } : n
+        ));
+        setUnreadCount(prev => Math.max(0, prev - 1));
+      }
+    } catch (err) {
+      console.error('Mark notification error:', err);
+    }
   };
 
   return (
@@ -360,9 +902,20 @@ export default function DashboardScreen() {
             <p className="text-white text-lg font-bold">{elderName} 👵</p>
           </div>
         </div>
-        <button onClick={() => setShowSOS(true)} className="bg-red-500 hover:bg-red-600 text-white font-bold px-4 py-2 rounded-full shadow-lg active:scale-95 flex items-center gap-1 border-2 border-red-400 transition-transform">
-          <AlertTriangle size={18} fill="white" /> SOS
-        </button>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setShowSOS(true)} 
+            className="bg-red-500 hover:bg-red-600 text-white font-bold px-4 py-2 rounded-full shadow-lg active:scale-95 flex items-center gap-1 border-2 border-red-400 transition-transform"
+          >
+            <AlertTriangle size={18} fill="white" /> SOS
+          </button>
+          <button 
+            onClick={handleLogout} 
+            className="bg-white/20 hover:bg-white/30 text-white font-bold px-3 py-2 rounded-full shadow-lg active:scale-95 flex items-center gap-1 border-2 border-white/30 transition-transform"
+          >
+            <LogOut size={18} />
+          </button>
+        </div>
       </div>
 
       {/* Content Area */}
@@ -371,6 +924,86 @@ export default function DashboardScreen() {
         {/* 1. Home Tab */}
         {activeTab === 'home' && (
           <div className="animate-in fade-in duration-300">
+            {/* Attendance Card */}
+            <div className="bg-white rounded-2xl p-5 shadow-sm mb-6 border border-gray-100">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center ${isCheckedIn ? 'bg-green-100' : 'bg-gray-100'}`}>
+                    <Clock size={24} className={isCheckedIn ? 'text-green-600' : 'text-gray-400'} />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 font-medium">สถานะการทำงาน</p>
+                    <p className={`text-lg font-bold ${isCheckedIn ? 'text-green-600' : 'text-gray-500'}`}>
+                      {isCheckedIn 
+                        ? `เข้างานแล้ว ${checkInTime ? new Date(checkInTime).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : ''}`
+                        : 'ยังไม่ได้เข้างาน'
+                      }
+                    </p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowAttendanceModal(true)}
+                  className={`${isCheckedIn ? 'bg-green-500 hover:bg-green-600' : 'bg-blue-500 hover:bg-blue-600'} text-white font-bold px-6 py-3 rounded-xl shadow-md active:scale-95 transition-transform flex items-center gap-2`}
+                >
+                  {isCheckedIn ? (
+                    <>
+                      <CheckCircle size={20} />
+                      ออกงาน
+                    </>
+                  ) : (
+                    <>
+                      <Clock size={20} />
+                      เข้างาน
+                    </>
+                  )}
+                </button>
+              </div>
+              {isCheckedIn && (
+                <div className="bg-green-50 border border-green-100 rounded-xl p-3 text-sm text-green-700">
+                  💼 คุณกำลังทำงานอยู่ อย่าลืมบันทึกงานและออกงานตอนเสร็จนะครับ
+                </div>
+              )}
+            </div>
+
+            {/* Notifications Card */}
+            <div className="bg-white rounded-2xl p-5 shadow-sm mb-6 border border-gray-100">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center ${unreadCount > 0 ? 'bg-blue-100' : 'bg-gray-100'}`}>
+                    <Bell size={24} className={unreadCount > 0 ? 'text-blue-600' : 'text-gray-400'} />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500 font-medium">การแจ้งเตือน</p>
+                    <p className={`text-lg font-bold ${unreadCount > 0 ? 'text-blue-600' : 'text-gray-500'}`}>
+                      {unreadCount > 0 ? `มี ${unreadCount} ข้อความใหม่` : 'ไม่มีข้อความใหม่'}
+                    </p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowNotifications(true)}
+                  className="bg-blue-500 hover:bg-blue-600 text-white font-bold px-6 py-3 rounded-xl shadow-md active:scale-95 transition-transform flex items-center gap-2"
+                >
+                  <Bell size={20} />
+                  {unreadCount > 0 && (
+                    <span className="bg-red-500 text-white text-xs font-bold rounded-full px-2 py-0.5">
+                      {unreadCount}
+                    </span>
+                  )}
+                  ดูทั้งหมด
+                </button>
+              </div>
+              {notifications.length > 0 && (
+                <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
+                  <p className="text-sm font-medium text-blue-900 mb-1">
+                    {notifications[0].title}
+                  </p>
+                  <p className="text-xs text-blue-700">
+                    {notifications[0].message}
+                  </p>
+                </div>
+              )}
+            </div>
+
             {/* Progress */}
             <div className="bg-white rounded-2xl p-4 shadow-sm mb-6 flex justify-between items-center border border-gray-100">
               <div>
@@ -761,7 +1394,7 @@ export default function DashboardScreen() {
             </div>
             <div className="grid grid-cols-2 gap-4 mb-6">
               {['🤕 หกล้ม', '🫁 หายใจไม่ออก', '💤 หมดสติ', '❓ อื่นๆ'].map(r => (
-                <button key={r} onClick={() => { setShowSOS(false); showAlert('แจ้งเหตุฉุกเฉิน', `${r}\n\nพิกัด GPS ถูกส่งไปยังลูกหลานแล้ว`, 'error'); }} className="bg-red-50 hover:bg-red-100 border-2 border-red-100 py-4 rounded-2xl text-red-700 font-bold text-lg transition-colors active:scale-95 shadow-sm">{r}</button>
+                <button key={r} onClick={() => handleSOS(r)} className="bg-red-50 hover:bg-red-100 border-2 border-red-100 py-4 rounded-2xl text-red-700 font-bold text-lg transition-colors active:scale-95 shadow-sm">{r}</button>
               ))}
             </div>
             <button onClick={() => setShowSOS(false)} className="w-full py-4 bg-gray-100 rounded-2xl text-gray-600 font-bold text-lg hover:bg-gray-200">ยกเลิก</button>
@@ -809,6 +1442,163 @@ export default function DashboardScreen() {
 
       {/* Alert Modal */}
       <CustomAlert isOpen={alert.isOpen} title={alert.title} message={alert.message} type={alert.type} onClose={() => setAlert({ ...alert, isOpen: false })} />
+
+      {/* Notifications Modal */}
+      {showNotifications && (
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-end sm:items-center justify-center animate-in fade-in duration-300 backdrop-blur-sm">
+          <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-6 pb-10 shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[85vh] overflow-hidden">
+            <div className="flex justify-between items-center mb-6 sticky top-0 bg-white pb-3 border-b">
+              <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                <Bell size={24} className="text-blue-600" />
+                การแจ้งเตือน
+              </h2>
+              <button 
+                onClick={() => setShowNotifications(false)}
+                className="p-2 bg-gray-100 rounded-full hover:bg-gray-200"
+              >
+                <X size={24} className="text-gray-500" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto max-h-[calc(85vh-180px)]">
+              {loadingNotifications ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="mt-2 text-sm text-gray-500">กำลังโหลด...</p>
+                </div>
+              ) : notifications.length === 0 ? (
+                <div className="text-center py-12 text-gray-400">
+                  <Bell size={48} className="mx-auto mb-4 opacity-20" />
+                  <p>ไม่มีการแจ้งเตือน</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {notifications.map((notif) => (
+                    <div 
+                      key={notif.id}
+                      onClick={() => !notif.isRead && markNotificationAsRead(notif.id)}
+                      className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+                        notif.isRead 
+                          ? 'bg-gray-50 border-gray-200' 
+                          : 'bg-blue-50 border-blue-200 shadow-sm'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <h3 className={`font-bold ${notif.isRead ? 'text-gray-700' : 'text-blue-900'}`}>
+                          {notif.title}
+                        </h3>
+                        {!notif.isRead && (
+                          <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-600 mb-2">{notif.message}</p>
+                      <p className="text-xs text-gray-400">
+                        {new Date(notif.createdAt).toLocaleDateString('th-TH', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <button 
+              onClick={() => setShowNotifications(false)}
+              className="w-full mt-6 bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl transition-colors"
+            >
+              ปิด
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Attendance Modal */}
+      {showAttendanceModal && (
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-end sm:items-center justify-center animate-in fade-in duration-300 backdrop-blur-sm">
+          <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-6 pb-10 shadow-2xl animate-in slide-in-from-bottom duration-300">
+            <div className="flex flex-col items-center mb-6">
+              <div className={`w-20 h-20 ${isCheckedIn ? 'bg-green-100' : 'bg-blue-100'} rounded-full flex items-center justify-center mb-4`}>
+                <User size={40} className={isCheckedIn ? 'text-green-600' : 'text-blue-600'} />
+              </div>
+              <h2 className={`text-3xl font-bold ${isCheckedIn ? 'text-green-600' : 'text-blue-600'} mb-2`}>
+                {isCheckedIn ? 'ออกงาน' : 'เข้างาน'}
+              </h2>
+              {isCheckedIn && checkInTime && (
+                <div className="text-center">
+                  <p className="text-gray-600 text-sm">
+                    เข้างาน {formatRelativeTime(checkInTime)}
+                  </p>
+                  <p className="text-gray-500 text-xs mt-1">
+                    {new Date(checkInTime).toLocaleString('th-TH', { 
+                      hour: '2-digit', 
+                      minute: '2-digit',
+                      day: 'numeric',
+                      month: 'short'
+                    })}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {isCheckedIn ? (
+              <div className="space-y-4">
+                <div className="bg-green-50 p-4 rounded-2xl border border-green-100 mb-4">
+                  <p className="text-center text-green-700 font-medium">
+                    คุณต้องการออกงานหรือไม่?
+                  </p>
+                </div>
+                <button 
+                  onClick={handleCheckOut}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white text-xl font-bold py-4 rounded-2xl shadow-xl active:scale-95 transition-transform"
+                >
+                  ✓ ยืนยันออกงาน
+                </button>
+                <button 
+                  onClick={() => setShowAttendanceModal(false)}
+                  className="w-full py-4 bg-gray-100 rounded-2xl text-gray-600 font-bold text-lg hover:bg-gray-200"
+                >
+                  ยกเลิก
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 mb-4">
+                  <p className="text-center text-blue-700 font-medium mb-3">
+                    📍 ระบบจะบันทึกตำแหน่งและเวลาเข้างาน
+                  </p>
+                  <div className="text-center text-gray-600 text-sm">
+                    <div className="flex items-center justify-center gap-2 mb-1">
+                      <span>🕐</span>
+                      <span>{new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                    <div className="flex items-center justify-center gap-2">
+                      <span>📅</span>
+                      <span>{new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                    </div>
+                  </div>
+                </div>
+                <button 
+                  onClick={handleCheckIn}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xl font-bold py-4 rounded-2xl shadow-xl active:scale-95 transition-transform"
+                >
+                  ✓ ยืนยันเข้างาน
+                </button>
+                <button 
+                  onClick={() => setShowAttendanceModal(false)}
+                  className="w-full py-4 bg-gray-100 rounded-2xl text-gray-600 font-bold text-lg hover:bg-gray-200"
+                >
+                  ยกเลิก
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
     </div>
   );

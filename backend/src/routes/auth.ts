@@ -120,14 +120,17 @@ router.post('/caregiver/login', async (req: Request, res: Response) => {
 
     const caregiver = await prisma.caregiver.findUnique({ where: { phone } });
     if (!caregiver) {
-      return res.status(401).json({ error: 'Invalid phone number', message: 'ไม่พบเบอร์โทรศัพท์นี้ในระบบ' });
+      return res.status(404).json({ 
+        error: 'Phone not found', 
+        message: 'ไม่พบเบอร์โทรศัพท์นี้ในระบบ\nกรุณาแจ้งครอบครัวเพื่อเพิ่มข้อมูลคุณ' 
+      });
     }
 
     // ตรวจสอบว่าผู้ดูแลได้รับการยืนยันแล้วหรือยัง
     if (!caregiver.verified) {
       return res.status(403).json({ 
         error: 'Not verified', 
-        message: 'บัญชีของคุณยังไม่ได้รับการยืนยันจากครอบครัว กรุณารอการอนุมัติ' 
+        message: 'บัญชีของคุณยังไม่ได้รับการยืนยันจากครอบครัว\nกรุณารอการอนุมัติหรือติดต่อครอบครัว' 
       });
     }
 

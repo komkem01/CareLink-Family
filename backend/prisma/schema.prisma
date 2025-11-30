@@ -471,8 +471,8 @@ model DailyReport {
   elderId String
   elder   Elder  @relation(fields: [elderId], references: [id], onDelete: Cascade)
 
-  caregiverId String
-  caregiver   Caregiver @relation(fields: [caregiverId], references: [id])
+  caregiverId String?
+  caregiver   Caregiver? @relation(fields: [caregiverId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

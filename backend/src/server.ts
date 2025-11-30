@@ -21,6 +21,8 @@ import caregiverExpenseRoutes from './routes/caregiver/expenses';
 import caregiverAttendanceRoutes from './routes/caregiver/attendance';
 import caregiverReportRoutes from './routes/caregiver/reports';
 import caregiverElderRoutes from './routes/caregiver/elder';
+import caregiverSOSRoutes from './routes/caregiver/sos';
+import caregiverNotificationRoutes from './routes/caregiver/notifications';
 
 // Shared routes
 import uploadRoutes from './routes/shared/upload';
@@ -105,6 +107,8 @@ app.use('/api/caregiver/health', caregiverHealthRoutes);
 app.use('/api/caregiver/expenses', caregiverExpenseRoutes);
 app.use('/api/caregiver/attendance', caregiverAttendanceRoutes);
 app.use('/api/caregiver/reports', caregiverReportRoutes);
+app.use('/api/caregiver/sos', caregiverSOSRoutes);
+app.use('/api/caregiver/notifications', caregiverNotificationRoutes);
 
 // Shared Routes (ใช้ร่วมกัน)
 app.use('/api/upload', uploadRoutes);

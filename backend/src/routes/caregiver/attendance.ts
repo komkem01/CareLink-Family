@@ -17,6 +17,19 @@ router.post("/check-in", authenticateCaregiver, async (req: Request, res: Respon
 
     const { location, photo, elderId } = req.body;
 
+    // ตรวจสอบว่า caregiver ยังมีอยู่ในระบบหรือไม่
+    const caregiver = await prisma.caregiver.findUnique({
+      where: { id: caregiverId },
+      select: { id: true, name: true }
+    });
+
+    if (!caregiver) {
+      return res.status(404).json({ 
+        error: 'Caregiver not found',
+        message: 'บัญชีของคุณถูกลบออกจากระบบแล้ว\nกรุณาติดต่อครอบครัวเพื่อเพิ่มข้อมูลใหม่' 
+      });
+    }
+
     // ตรวจสอบว่าวันนี้ check-in แล้วหรือยัง
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -28,7 +41,9 @@ router.post("/check-in", authenticateCaregiver, async (req: Request, res: Respon
       },
     });
 
-    if (existingAttendance && existingAttendance.checkInTime) {
+    // ถ้ามี attendance แล้ว และยังไม่ได้ checkout ให้บล็อก
+    // แต่ถ้า checkout ไปแล้ว ให้สร้างรอบใหม่ได้
+    if (existingAttendance && existingAttendance.checkInTime && !existingAttendance.checkOutTime) {
       return res.status(400).json({ 
         message: "คุณลงเวลาเข้างานวันนี้แล้ว",
         attendance: existingAttendance 
@@ -42,15 +57,27 @@ router.post("/check-in", authenticateCaregiver, async (req: Request, res: Respon
     const isLate = checkInTime.getHours() > workStartHour || 
                    (checkInTime.getHours() === workStartHour && checkInTime.getMinutes() > 15);
 
+    // ถ้ามี record เก่าที่ checkout แล้ว → reset เป็นรอบใหม่ (ไม่ลบข้อมูลเก่า)
+    // ข้อมูลเก่ายังคงอยู่ในฐานข้อมูลเพื่อให้ครอบครัวดูประวัติได้
+    // แต่จะ reset attendance record เพื่อเริ่มรอบใหม่
+    
+    // ถ้ามี record เก่า → reset เป็นรอบใหม่
+    // ถ้ายังไม่มี record → สร้างใหม่
     const attendance = existingAttendance
       ? await prisma.attendance.update({
           where: { id: existingAttendance.id },
           data: {
             checkInTime,
+            checkOutTime: null, // reset checkout time
             checkInLocation: location || null,
+            checkOutLocation: null, // reset checkout location
             checkInPhoto: photo || null,
+            checkOutPhoto: null, // reset checkout photo
             status: isLate ? "late" : "present",
-            elderId: elderId || null,
+            hoursWorked: 0, // reset hours
+            overtimeHours: 0, // reset overtime
+            isOvertime: false,
+            elderId: elderId || existingAttendance.elderId,
           },
         })
       : await prisma.attendance.create({
@@ -70,6 +97,37 @@ router.post("/check-in", authenticateCaregiver, async (req: Request, res: Respon
       where: { id: caregiverId },
       data: { lastActiveAt: new Date() },
     });
+
+    // สร้างการแจ้งเตือนไปยังครอบครัว
+    if (attendance.elderId) {
+      try {
+        // ดึงข้อมูลผู้ดูแลและผู้สูงอายุ
+        const caregiver = await prisma.caregiver.findUnique({
+          where: { id: caregiverId },
+          select: { name: true }
+        });
+        
+        const elder = await prisma.elder.findUnique({
+          where: { id: attendance.elderId },
+          select: { familyUserId: true, name: true }
+        });
+
+        if (elder?.familyUserId) {
+          const timeStr = checkInTime.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+          await prisma.notification.create({
+            data: {
+              userId: elder.familyUserId,
+              title: 'ผู้ดูแลเข้างานแล้ว',
+              message: `${caregiver?.name || 'ผู้ดูแล'} เข้างานดูแล ${elder.name} เวลา ${timeStr}${isLate ? ' (มาสาย)' : ''}`,
+              type: 'attendance',
+              isRead: false,
+            }
+          });
+        }
+      } catch (err) {
+        console.error('Failed to create check-in notification:', err);
+      }
+    }
 
     return res.json({
       message: isLate ? "ลงเวลาเข้างานสำเร็จ (มาสาย)" : "ลงเวลาเข้างานสำเร็จ",
@@ -153,6 +211,38 @@ router.post("/check-out", authenticateCaregiver, async (req: Request, res: Respo
       where: { id: caregiverId },
       data: { lastActiveAt: new Date() },
     });
+
+    // สร้างการแจ้ลงเตือนไปยังครอบครัว
+    if (attendance.elderId) {
+      try {
+        const caregiver = await prisma.caregiver.findUnique({
+          where: { id: caregiverId },
+          select: { name: true }
+        });
+        
+        const elder = await prisma.elder.findUnique({
+          where: { id: attendance.elderId },
+          select: { familyUserId: true, name: true }
+        });
+
+        if (elder?.familyUserId) {
+          const timeStr = checkOutTime.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+          const hoursStr = Math.round(hoursWorked * 10) / 10; // 1 ทศนิยม
+          
+          await prisma.notification.create({
+            data: {
+              userId: elder.familyUserId,
+              title: 'ผู้ดูแลออกงานแล้ว',
+              message: `${caregiver?.name || 'ผู้ดูแล'} ออกงานดูแล ${elder.name} เวลา ${timeStr} (ทำงาน ${hoursStr} ชม.)${isOvertime ? ` โอที ${Math.round(overtimeHours * 10) / 10} ชม.` : ''}`,
+              type: 'attendance',
+              isRead: false,
+            }
+          });
+        }
+      } catch (err) {
+        console.error('Failed to create check-out notification:', err);
+      }
+    }
 
     return res.json({
       message: "ลงเวลาออกงานสำเร็จ",

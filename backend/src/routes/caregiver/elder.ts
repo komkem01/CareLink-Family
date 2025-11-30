@@ -1,13 +1,13 @@
 import { Router, Request, Response } from 'express';
 import prisma from '../../lib/prisma';
-import { authenticateToken } from '../../middleware/auth';
+import { authenticateCaregiver } from '../../middleware/auth';
 
 const router = Router();
 
 // GET /api/caregiver/elder - ดึงข้อมูลผู้สูงอายุที่ดูแล
-router.get('/', authenticateToken, async (req: Request, res: Response) => {
+router.get('/', authenticateCaregiver, async (req: Request, res: Response) => {
   try {
-    const caregiverId = (req as any).user?.id;
+    const caregiverId = req.user?.caregiverId || req.userId;
     
     if (!caregiverId) {
       return res.status(401).json({ error: 'Unauthorized' });

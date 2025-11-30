@@ -153,6 +153,28 @@ router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
+    // ตรวจสอบว่าผู้ดูแลกำลังเข้างานอยู่หรือไม่
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const activeAttendance = await prisma.attendance.findFirst({
+      where: {
+        caregiverId: id,
+        workDate: {
+          gte: today
+        },
+        checkOutTime: null // ยังไม่ได้ออกงาน
+      }
+    });
+
+    if (activeAttendance) {
+      return res.status(400).json({ 
+        error: 'Caregiver is currently working',
+        message: 'ไม่สามารถลบผู้ดูแลได้ เนื่องจากกำลังเข้างานอยู่\nกรุณารอให้ออกงานก่อน'
+      });
+    }
+
+    // ถ้าไม่ได้เข้างานอยู่ ลบได้
     await prisma.caregiver.delete({
       where: { id }
     });
