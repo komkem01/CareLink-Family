@@ -20,6 +20,7 @@ import caregiverHealthRoutes from './routes/caregiver/health';
 import caregiverExpenseRoutes from './routes/caregiver/expenses';
 import caregiverAttendanceRoutes from './routes/caregiver/attendance';
 import caregiverReportRoutes from './routes/caregiver/reports';
+import caregiverElderRoutes from './routes/caregiver/elder';
 
 // Shared routes
 import uploadRoutes from './routes/shared/upload';
@@ -29,6 +30,15 @@ import profileRoutes from './routes/shared/profile';
 dotenv.config();
 
 const app: Express = express();
+const PORT = process.env.PORT || 8080;
+
+// Allowed origins
+const allowedOrigins = [
+  'http://192.168.1.44:3000',
+  'http://localhost:3000',
+  process.env.FRONTEND_URL
+].filter(Boolean);
+
 // Log frontend requests: method, path, origin (with color)
 const methodColors: Record<string, string> = {
   GET: '\x1b[32m',      // green
@@ -45,14 +55,8 @@ app.use((req: Request, res: Response, next) => {
   }
   next();
 });
-const PORT = process.env.PORT || 8000;
 
-// Middleware
-const allowedOrigins = [
-  'http://localhost:3000',
-  'http://localhost:8080',
-  process.env.FRONTEND_URL
-].filter(Boolean);
+// CORS Middleware
 app.use(cors({
   origin: function (origin, callback) {
     // allow requests with no origin (like mobile apps, curl, etc)
@@ -60,6 +64,7 @@ app.use(cors({
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     } else {
+      console.log(`❌ CORS blocked: ${origin}`);
       return callback(new Error('Not allowed by CORS'));
     }
   },
@@ -94,6 +99,7 @@ app.use('/api/family/notifications', familyNotificationRoutes);
 app.use('/api/family/reports', familyReportRoutes);
 
 // Caregiver Routes (ผู้ดูแล)
+app.use('/api/caregiver/elder', caregiverElderRoutes);
 app.use('/api/caregiver/tasks', caregiverTaskRoutes);
 app.use('/api/caregiver/health', caregiverHealthRoutes);
 app.use('/api/caregiver/expenses', caregiverExpenseRoutes);

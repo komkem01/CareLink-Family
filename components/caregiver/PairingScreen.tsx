@@ -1,15 +1,18 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Lock, ArrowRight, Camera } from "lucide-react";
 import CustomAlert from "../CustomAlert";
 
 interface Props {
+  initialCode?: string;
   onPairSuccess: () => void;
   onBack: () => void;
 }
 
-export default function PairingScreen({ onPairSuccess, onBack }: Props) {
-  const [pairCode, setPairCode] = useState("");
+export default function PairingScreen({ initialCode = '', onPairSuccess, onBack }: Props) {
+  const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
+  const [pairCode, setPairCode] = useState(initialCode);
+  const [isLoading, setIsLoading] = useState(false);
   type AlertType = "info" | "error" | "success";
   const [alert, setAlert] = useState<{
     isOpen: boolean;
@@ -23,7 +26,14 @@ export default function PairingScreen({ onPairSuccess, onBack }: Props) {
     type: "info",
   });
 
-  const handlePair = () => {
+  // Auto-submit เมื่อมี initialCode
+  useEffect(() => {
+    if (initialCode && initialCode.length >= 4) {
+      handlePair();
+    }
+  }, [initialCode]);
+
+  const handlePair = async () => {
     if (pairCode.length < 4) {
       setAlert({
         isOpen: true,
@@ -31,13 +41,68 @@ export default function PairingScreen({ onPairSuccess, onBack }: Props) {
         message: "กรุณากรอกรหัสบ้าน 6 หลักให้ครบถ้วนครับ",
         type: "error",
       });
-    } else {
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const user = localStorage.getItem('user');
+      
+      if (!token || !user) {
+        setAlert({
+          isOpen: true,
+          title: "ข้อผิดพลาด",
+          message: "กรุณาเข้าสู่ระบบใหม่อีกครั้ง",
+          type: "error",
+        });
+        return;
+      }
+
+      const userData = JSON.parse(user);
+      
+      const res = await fetch(`${BASE_URL}/auth/caregiver/pairing`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          caregiverId: userData.id,
+          pairingCode: pairCode
+        })
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.caregiver && data.elder) {
+        // อัพเดท user data ด้วย elderId
+        const updatedUser = { ...userData, elderId: data.elder.id };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        
+        setAlert({
+          isOpen: true,
+          title: "เชื่อมต่อสำเร็จ! 🎉",
+          message: `ยินดีต้อนรับเข้าสู่บ้าน '${data.elder.name}'`,
+          type: "success",
+        });
+      } else {
+        setAlert({
+          isOpen: true,
+          title: "เชื่อมต่อล้มเหลว",
+          message: data.message || "รหัสไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง",
+          type: "error",
+        });
+      }
+    } catch (error) {
       setAlert({
         isOpen: true,
-        title: "เชื่อมต่อสำเร็จ! 🎉",
-        message: "ยินดีต้อนรับเข้าสู่บ้าน 'คุณยายสมศรี'",
-        type: "success",
+        title: "ข้อผิดพลาด",
+        message: "ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้",
+        type: "error",
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -79,9 +144,19 @@ export default function PairingScreen({ onPairSuccess, onBack }: Props) {
 
       <button
         onClick={handlePair}
-        className="w-full bg-green-600 hover:bg-green-700 text-white text-lg font-bold py-4 rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
+        disabled={isLoading}
+        className="w-full bg-green-600 hover:bg-green-700 text-white text-lg font-bold py-4 rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        เชื่อมต่อ <ArrowRight size={24} />
+        {isLoading ? (
+          <>
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+            กำลังเชื่อมต่อ...
+          </>
+        ) : (
+          <>
+            เชื่อมต่อ <ArrowRight size={24} />
+          </>
+        )}
       </button>
 
       <div className="mt-auto">

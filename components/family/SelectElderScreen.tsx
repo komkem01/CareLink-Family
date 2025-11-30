@@ -10,6 +10,7 @@ interface Elder {
   age: number;
   relation: string;
   profileColor: string;
+  pairingCode: string;
 }
 
 interface Props {

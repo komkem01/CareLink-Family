@@ -12,6 +12,7 @@ interface Elder {
   age: number;
   relation: string;
   profileColor: string;
+  pairingCode: string;
 }
 
 export default function FamilyApp() {

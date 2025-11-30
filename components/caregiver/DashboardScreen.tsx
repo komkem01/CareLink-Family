@@ -99,9 +99,9 @@ export default function DashboardScreen() {
 
   // Fetch Tasks
   useEffect(() => {
-    if (!elderId || !token) return;
+    if (!caregiverId || !token) return;
     setLoadingTasks(true);
-    fetch(`${BASE_URL}/caregiver/tasks?elderId=${elderId}`, {
+    fetch(`${BASE_URL}/caregiver/tasks?caregiverId=${caregiverId}`, {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(res => res.json())
@@ -110,9 +110,9 @@ export default function DashboardScreen() {
           id: t.id,
           time: t.time,
           title: t.title,
-          detail: t.description || '',
-          instruction: t.notes || '',
-          status: (t.completed ? 'done' : 'pending') as 'done' | 'pending'
+          detail: t.detail || '',
+          instruction: t.instruction || '',
+          status: t.status || 'pending'
         })) : [];
         setTasks(tasksData);
         setLoadingTasks(false);
@@ -121,7 +121,7 @@ export default function DashboardScreen() {
         console.error('Failed to fetch tasks:', err);
         setLoadingTasks(false);
       });
-  }, [elderId, token, BASE_URL]);
+  }, [caregiverId, token, BASE_URL]);
 
   // Fetch Expenses
   useEffect(() => {
@@ -150,7 +150,7 @@ export default function DashboardScreen() {
 
   // Computed
   const completedCount = tasks.filter(t => t.status === 'done').length;
-  const progressPercent = (completedCount / tasks.length) * 100;
+  const progressPercent = tasks.length > 0 ? (completedCount / tasks.length) * 100 : 0;
   const totalExpense = expenses.reduce((sum, ex) => sum + ex.price, 0);
   const pendingTask = tasks.find(t => t.status === 'pending');
 
@@ -383,7 +383,7 @@ export default function DashboardScreen() {
             </div>
 
             {/* Hero Task */}
-            {pendingTask && (
+            {pendingTask ? (
               <div onClick={() => setSelectedTask(pendingTask)} className="relative bg-gradient-to-br from-indigo-600 to-blue-500 p-6 rounded-3xl mb-8 shadow-xl text-white overflow-hidden cursor-pointer transition-transform hover:scale-[1.02]">
                 <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
                 <div className="flex items-center mb-3">
@@ -398,7 +398,15 @@ export default function DashboardScreen() {
                   👉 ดูวิธีทำและเริ่มงาน
                 </button>
               </div>
-            )}
+            ) : tasks.length > 0 ? (
+              <div className="relative bg-gradient-to-br from-green-500 to-emerald-600 p-6 rounded-3xl mb-8 shadow-xl text-white overflow-hidden">
+                <div className="text-center">
+                  <CheckCircle size={48} className="mx-auto mb-3" />
+                  <h2 className="text-2xl font-bold mb-2">🎉 เยี่ยมมาก!</h2>
+                  <p className="text-green-100 text-lg">ทำงานเสร็จหมดแล้ววันนี้</p>
+                </div>
+              </div>
+            ) : null}
 
             {/* Task List */}
             <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
@@ -411,8 +419,14 @@ export default function DashboardScreen() {
               </div>
             ) : tasks.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
-                <ClipboardList size={48} className="mx-auto mb-2 opacity-20" />
-                <p>ยังไม่มีงานสำหรับวันนี้</p>
+                <ClipboardList size={48} className="mx-auto mb-4 opacity-20" />
+                <p className="mb-4">ยังไม่มีงานสำหรับวันนี้</p>
+                <button 
+                  onClick={() => setTasks(INITIAL_TASKS)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-2xl shadow-lg transition-all active:scale-95"
+                >
+                  📋 โหลดงานตัวอย่าง
+                </button>
               </div>
             ) : (
               <div className="space-y-3">

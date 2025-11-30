@@ -42,6 +42,7 @@ interface Elder {
   age: number;
   relation: string;
   profileColor: string;
+  pairingCode: string; // รหัสสำหรับให้ผู้ดูแลจับคู่
 }
 
 interface Caregiver {
@@ -640,7 +641,7 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
         if (res.ok && data.id) {
           showAlertMessage(
             "เพิ่มสำเร็จ",
-            `เพิ่มผู้ดูแล ${caregiverName} เรียบร้อย\nรหัสจับคู่: ${data.pairingCode}`,
+            `เพิ่มผู้ดูแล ${caregiverName} เรียบร้อย\nกรุณาให้ผู้ดูแลใช้รหัส ${selectedElder.pairingCode} เพื่อจับคู่ในแอพผู้ดูแล`,
             "success"
           );
           setLoadingCaregivers(true);
@@ -1079,13 +1080,17 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
           }),
         });
         const data = await res.json();
-        if (res.ok && data.id) {
+        if (res.ok && data.activity) {
           setActivityTitle("");
           setActivityDesc("");
           setActivityTime("");
           setActivityDate("");
           setShowActivityForm(false);
-          showAlertMessage("เพิ่มสำเร็จ", "เพิ่มกิจกรรมเรียบร้อย", "success");
+          showAlertMessage(
+            "เพิ่มสำเร็จ",
+            data.message || "เพิ่มกิจกรรมเรียบร้อย",
+            "success"
+          );
           setLoadingActivities(true);
           setTimeout(() => reloadActivities(), 300);
         } else {
@@ -2229,34 +2234,36 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                       </div>
                     </div>
 
-                    {/* Pairing Code */}
-                    <div className="bg-gradient-to-r from-purple-100 to-blue-100 rounded-xl p-3 mb-3 border-2 border-dashed border-purple-300">
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <p className="text-xs text-purple-700 font-medium mb-1">
-                            รหัสจับคู่ (Pairing Code)
-                          </p>
-                          <p className="text-2xl font-bold text-purple-900 tracking-widest">
-                            {caregiver.pairingCode}
-                          </p>
-                          <p className="text-xs text-purple-600 mt-2">
-                            ผู้ดูแลใช้รหัสนี้เพื่อจับคู่กับผู้สูงอายุ
-                          </p>
+                    {/* Pairing Code - ของคุณยาย */}
+                    {selectedElder && selectedElder.pairingCode && (
+                      <div className="bg-gradient-to-r from-purple-100 to-blue-100 rounded-xl p-3 mb-3 border-2 border-dashed border-purple-300">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <p className="text-xs text-purple-700 font-medium mb-1">
+                              รหัสจับคู่ของ {selectedElder.name}
+                            </p>
+                            <p className="text-2xl font-bold text-purple-900 tracking-widest">
+                              {selectedElder.pairingCode}
+                            </p>
+                            <p className="text-xs text-purple-600 mt-2">
+                              ผู้ดูแลใช้รหัสนี้เพื่อจับคู่ในแอพผู้ดูแล
+                            </p>
+                          </div>
+                          <button
+                            onClick={() =>
+                              copyPairingCode(
+                                selectedElder.pairingCode,
+                                selectedElder.name
+                              )
+                            }
+                            className="bg-white hover:bg-purple-50 p-3 rounded-xl transition-colors border border-purple-200 active:scale-95"
+                            title="คัดลอกรหัส"
+                          >
+                            <Copy size={20} className="text-purple-600" />
+                          </button>
                         </div>
-                        <button
-                          onClick={() =>
-                            copyPairingCode(
-                              caregiver.pairingCode,
-                              caregiver.name
-                            )
-                          }
-                          className="bg-white hover:bg-purple-50 p-3 rounded-xl transition-colors border border-purple-200 active:scale-95"
-                          title="คัดลอกรหัส"
-                        >
-                          <Copy size={20} className="text-purple-600" />
-                        </button>
                       </div>
-                    </div>
+                    )}
 
                     {/* รายละเอียดเพิ่มเติม - Collapsible */}
                     <details className="group">
@@ -3821,7 +3828,7 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                       <p className="font-bold text-gray-800">{c.name}</p>
                       <p className="text-sm text-gray-600">โทร: {c.phone}</p>
                       <p className="text-xs text-gray-500">
-                        รหัส: {c.pairingCode}
+                        {c.verified ? '✓ ยืนยันตัวตนแล้ว' : 'รอการยืนยัน'}
                       </p>
                     </div>
                   ))}

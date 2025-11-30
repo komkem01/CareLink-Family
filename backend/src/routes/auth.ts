@@ -113,21 +113,25 @@ router.post('/family/login', async (req: Request, res: Response) => {
   }
 });
 
-// Caregiver Login
+// Caregiver Login - ตรวจสอบเบอร์โทรและสถานะการยืนยัน
 router.post('/caregiver/login', async (req: Request, res: Response) => {
   try {
-    const { phone, password } = req.body;
+    const { phone } = req.body;
 
     const caregiver = await prisma.caregiver.findUnique({ where: { phone } });
     if (!caregiver) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      return res.status(401).json({ error: 'Invalid phone number', message: 'ไม่พบเบอร์โทรศัพท์นี้ในระบบ' });
     }
 
-    const isValid = await bcrypt.compare(password, caregiver.password);
-    if (!isValid) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+    // ตรวจสอบว่าผู้ดูแลได้รับการยืนยันแล้วหรือยัง
+    if (!caregiver.verified) {
+      return res.status(403).json({ 
+        error: 'Not verified', 
+        message: 'บัญชีของคุณยังไม่ได้รับการยืนยันจากครอบครัว กรุณารอการอนุมัติ' 
+      });
     }
 
+    // สร้าง token สำหรับ caregiver
     const token = generateToken(caregiver.id, 'caregiver', caregiver.name);
 
     res.json({
@@ -137,6 +141,7 @@ router.post('/caregiver/login', async (req: Request, res: Response) => {
         id: caregiver.id,
         name: caregiver.name,
         phone: caregiver.phone,
+        elderId: caregiver.elderId, // ส่ง elderId ไปด้วยเพื่อตรวจสอบว่าจับคู่แล้วหรือยัง
       },
     });
   } catch (error: any) {
