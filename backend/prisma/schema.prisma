@@ -80,10 +80,9 @@ model Caregiver {
   certificateImage String?
   photoUrl         String? // Profile photo
 
-  // Pairing System
-  pairingCode String  @unique // 6-digit code
-  elderId     String? // Multiple caregivers can be assigned to one elder
-  elder       Elder?  @relation(fields: [elderId], references: [id])
+  // Elder Assignment
+  elderId String? // Multiple caregivers can be assigned to one elder
+  elder   Elder?  @relation(fields: [elderId], references: [id])
 
   // Contract Information
   contractStartDate DateTime?
@@ -98,7 +97,6 @@ model Caregiver {
   // Relations
   tasks         Task[]
   healthRecords HealthRecord[]
-  moods         Mood[]
   reports       DailyReport[]
   reviews       CaregiverReview[]
   payrolls      Payroll[]
@@ -106,7 +104,6 @@ model Caregiver {
   attendances   Attendance[]
 
   @@index([phone])
-  @@index([pairingCode])
   @@index([elderId])
   @@map("caregivers")
 }
@@ -165,9 +162,7 @@ model Elder {
   activities    Activity[]
   appointments  Appointment[]
   healthRecords HealthRecord[]
-  moods         Mood[]
   reports       DailyReport[]
-  medications   Medication[]
   vitalSigns    VitalSign[]
 
   @@index([familyUserId])
@@ -430,120 +425,6 @@ model VitalSign {
   @@index([elderId])
   @@index([measuredAt])
   @@map("vital_signs")
-}
-
-model Medication {
-  id        String   @id @default(uuid())
-  name      String
-  dosage    String // "500mg", "2 tablets"
-  frequency String // "3 times daily", "every 8 hours"
-  timing    String[] // ["morning", "afternoon", "evening"]
-  times     String[] @default([]) // ["08:00", "14:00", "20:00"] เวลาเฉพาะ
-
-  // Instructions
-  instructions String? @db.Text
-  sideEffects  String? @db.Text
-
-  // Reminder Settings
-  reminderEnabled Boolean @default(true)
-  reminderBefore  Int     @default(30) // แจ้งเตือนก่อนกี่นาที
-  
-  // Inventory Tracking
-  currentStock Int?     // จำนวนคงเหลือ
-  minStock     Int?     // แจ้งเตือนเมื่อต่ำกว่า
-  unit         String?  @default("เม็ด") // เม็ด, แคปซูล, ช้อน
-
-  // Schedule
-  startDate DateTime
-  endDate   DateTime?
-
-  // Status
-  isActive Boolean @default(true)
-
-  // Doctor prescribed
-  prescribedBy String?
-  prescription String? // Prescription document URL
-
-  elderId String
-  elder   Elder  @relation(fields: [elderId], references: [id], onDelete: Cascade)
-  
-  // Relations
-  intakes MedicationIntake[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([elderId])
-  @@index([isActive])
-  @@map("medications")
-}
-
-// ตารางบันทึกการกินยา
-model MedicationIntake {
-  id String @id @default(uuid())
-  
-  medicationId String
-  medication   Medication @relation(fields: [medicationId], references: [id], onDelete: Cascade)
-  
-  scheduledTime DateTime // เวลาที่ควรกิน
-  actualTime    DateTime? // เวลาที่กินจริง
-  
-  status String @default("pending") // pending, taken, missed, skipped
-  
-  // ผู้บันทึก
-  takenBy     String? // Caregiver name
-  caregiverId String?
-  
-  // หมายเหตุ
-  notes    String? @db.Text
-  photoUrl String? // รูปถ่ายยืนยันการกินยา
-  
-  // Reminder
-  reminderSent Boolean @default(false)
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
-  @@index([medicationId])
-  @@index([scheduledTime])
-  @@index([status])
-  @@map("medication_intakes")
-}
-
-model Mood {
-  id String @id @default(uuid())
-
-  // Mood tracking
-  mood      String // happy, sad, neutral, angry, anxious
-  moodLevel Int?   @default(5) // 1-10 scale
-
-  timeOfDay String // morning, afternoon, evening, night
-
-  // Behavior observations
-  activities String[] @default([]) // eating, sleeping, social
-  behaviors  String[] @default([]) // active, quiet, talkative
-
-  // Additional notes
-  note     String?  @db.Text
-  triggers String[] @default([]) // What caused the mood
-
-  // Photo/Video evidence
-  photoUrl String?
-
-  recordedAt DateTime @default(now())
-
-  elderId String
-  elder   Elder  @relation(fields: [elderId], references: [id], onDelete: Cascade)
-
-  caregiverId String
-  caregiver   Caregiver @relation(fields: [caregiverId], references: [id])
-
-  createdAt DateTime @default(now())
-
-  @@index([elderId])
-  @@index([caregiverId])
-  @@index([recordedAt])
-  @@map("moods")
 }
 
 // ============================================

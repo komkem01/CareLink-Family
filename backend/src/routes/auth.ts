@@ -145,27 +145,43 @@ router.post('/caregiver/login', async (req: Request, res: Response) => {
   }
 });
 
-// Verify Pairing Code
+// Verify Pairing Code - คนดูแลใส่รหัสของยาย
 router.post('/caregiver/pairing', async (req: Request, res: Response) => {
   try {
     const { pairingCode, caregiverId } = req.body;
 
-    const caregiver = await prisma.caregiver.findFirst({
+    // หายายที่มี pairingCode นี้
+    const elder = await prisma.elder.findUnique({
       where: {
-        id: caregiverId,
         pairingCode,
       },
+      include: {
+        familyUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    if (!elder) {
+      return res.status(404).json({ error: 'Invalid pairing code', message: 'ไม่พบรหัสจับคู่นี้' });
+    }
+
+    // อัพเดทให้คนดูแลจับคู่กับยายคนนี้
+    const caregiver = await prisma.caregiver.update({
+      where: { id: caregiverId },
+      data: { elderId: elder.id },
       include: {
         elder: true,
       },
     });
 
-    if (!caregiver) {
-      return res.status(404).json({ error: 'Invalid pairing code' });
-    }
-
     res.json({
-      message: 'Pairing verified',
+      message: 'Pairing successful',
+      elder,
       caregiver,
     });
   } catch (error: any) {

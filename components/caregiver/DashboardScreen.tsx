@@ -1,12 +1,11 @@
 'use client';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { 
   Home, Activity, Wallet, FileCheck, User, AlertTriangle, Bell, 
   CheckCircle, ChevronRight, ShoppingBag, Plus, Send, Trash2, MessageSquare,
   CloudSun, Sun, Sunset, Moon, Info, ClipboardList, Camera, X, Pill
 } from 'lucide-react';
 import CustomAlert from '../CustomAlert';
-import MedicationsTab from './MedicationsTab';
 
 // --- Types & Mock Data ---
 interface Task { id: string; time: string; title: string; detail: string; instruction: string; status: 'done'|'pending'; }
@@ -27,14 +26,51 @@ const INITIAL_TASKS: Task[] = [
 ];
 
 export default function DashboardScreen() {
+  // Authentication & Config
+  const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+  const [token, setToken] = useState<string>('');
+  const [caregiverId, setCaregiverId] = useState<string>('');
+  const [elderId, setElderId] = useState<string>('');
+  const [elderName, setElderName] = useState<string>('คุณยาย');
+
+  // Load auth data from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedToken = localStorage.getItem('token') || '';
+      const storedUser = localStorage.getItem('user');
+      setToken(storedToken);
+      
+      if (storedUser) {
+        try {
+          const user = JSON.parse(storedUser);
+          setCaregiverId(user.id || '');
+          setElderId(user.elderId || '');
+          
+          // Fetch elder name
+          if (user.elderId && storedToken) {
+            fetch(`${BASE_URL}/caregiver/elder`, {
+              headers: { Authorization: `Bearer ${storedToken}` }
+            })
+              .then(res => res.json())
+              .then(data => {
+                if (data.name) setElderName(data.name);
+              })
+              .catch(err => console.error('Failed to fetch elder:', err));
+          }
+        } catch (e) {
+          console.error('Failed to parse user:', e);
+        }
+      }
+    }
+  }, [BASE_URL]);
+
   // State
   const [activeTab, setActiveTab] = useState('home');
-  const [tasks, setTasks] = useState(INITIAL_TASKS);
-  const [expenses, setExpenses] = useState<Expense[]>([
-    // ตัวอย่างรายการที่ผู้ดูแลเพิ่ม (จะแสดงทั้ง 2 ฝั่ง)
-    { id: "1", item: "ค่ายา", price: 1500, addedBy: "caregiver", date: "2024-11-25" },
-    { id: "2", item: "ค่าอาหาร", price: 800, addedBy: "caregiver", date: "2024-11-26" },
-  ]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [loadingExpenses, setLoadingExpenses] = useState(false);
+  const [confirmDeleteExpenseId, setConfirmDeleteExpenseId] = useState<string | null>(null);
   const [newItemName, setNewItemName] = useState('');
   const [newItemPrice, setNewItemPrice] = useState('');
   const [recordedMoods, setRecordedMoods] = useState<string[]>([]);
@@ -44,6 +80,7 @@ export default function DashboardScreen() {
   const [manualChecks, setManualChecks] = useState<string[]>([]);
   const [sys, setSys] = useState('');
   const [dia, setDia] = useState('');
+  const [heartRate, setHeartRate] = useState('');
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showSOS, setShowSOS] = useState(false);
   type AlertType = "info" | "error" | "success";
@@ -60,6 +97,57 @@ export default function DashboardScreen() {
   });
   const [timeError, setTimeError] = useState(false);
 
+  // Fetch Tasks
+  useEffect(() => {
+    if (!elderId || !token) return;
+    setLoadingTasks(true);
+    fetch(`${BASE_URL}/caregiver/tasks?elderId=${elderId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(res => res.json())
+      .then(data => {
+        const tasksData: Task[] = Array.isArray(data) ? data.map((t: any) => ({
+          id: t.id,
+          time: t.time,
+          title: t.title,
+          detail: t.description || '',
+          instruction: t.notes || '',
+          status: (t.completed ? 'done' : 'pending') as 'done' | 'pending'
+        })) : [];
+        setTasks(tasksData);
+        setLoadingTasks(false);
+      })
+      .catch(err => {
+        console.error('Failed to fetch tasks:', err);
+        setLoadingTasks(false);
+      });
+  }, [elderId, token, BASE_URL]);
+
+  // Fetch Expenses
+  useEffect(() => {
+    if (!elderId || !token) return;
+    setLoadingExpenses(true);
+    fetch(`${BASE_URL}/caregiver/expenses?elderId=${elderId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(res => res.json())
+      .then(data => {
+        const expensesData = Array.isArray(data) ? data.map((e: any) => ({
+          id: e.id,
+          item: e.item,
+          price: Number(e.amount),
+          addedBy: 'caregiver' as const,
+          date: new Date(e.date).toISOString().split('T')[0]
+        })) : [];
+        setExpenses(expensesData);
+        setLoadingExpenses(false);
+      })
+      .catch(err => {
+        console.error('Failed to fetch expenses:', err);
+        setLoadingExpenses(false);
+      });
+  }, [elderId, token, BASE_URL]);
+
   // Computed
   const completedCount = tasks.filter(t => t.status === 'done').length;
   const progressPercent = (completedCount / tasks.length) * 100;
@@ -71,22 +159,74 @@ export default function DashboardScreen() {
     setAlert({ isOpen: true, title, message, type });
   };
 
-  const handleAddExpense = () => {
-    if (!newItemName || !newItemPrice) return showAlert('ข้อมูลไม่ครบ', 'กรุณากรอกชื่อรายการและราคา', 'error');
-    const newExpense: Expense = {
-      id: Date.now().toString(),
-      item: newItemName,
-      price: parseFloat(newItemPrice),
-      addedBy: "caregiver",
-      date: new Date().toISOString().split("T")[0],
-    };
-    setExpenses([...expenses, newExpense]);
-    setNewItemName(''); setNewItemPrice('');
-    showAlert('บันทึกแล้ว', 'เพิ่มรายการเรียบร้อย (ลูกหลานจะเห็นรายการนี้ด้วย)', 'success');
+  const handleAddExpense = async () => {
+    if (!newItemName || !newItemPrice) {
+      return showAlert('ข้อมูลไม่ครบ', 'กรุณากรอกชื่อรายการและราคา', 'error');
+    }
+    
+    try {
+      const res = await fetch(`${BASE_URL}/caregiver/expenses`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          item: newItemName,
+          amount: parseFloat(newItemPrice),
+          date: new Date().toISOString().split('T')[0],
+          elderId: elderId,
+          caregiverId: caregiverId
+        })
+      });
+      
+      const data = await res.json();
+      
+      if (res.ok && data.id) {
+        // Add to local state
+        const newExpense: Expense = {
+          id: data.id,
+          item: newItemName,
+          price: parseFloat(newItemPrice),
+          addedBy: "caregiver",
+          date: new Date().toISOString().split("T")[0],
+        };
+        setExpenses([newExpense, ...expenses]);
+        setNewItemName('');
+        setNewItemPrice('');
+        showAlert('บันทึกแล้ว', 'เพิ่มรายการเรียบร้อย (ลูกหลานจะเห็นรายการนี้ด้วย)', 'success');
+      } else {
+        showAlert('เพิ่มล้มเหลว', data.message || 'เกิดข้อผิดพลาดในการเพิ่มรายการ', 'error');
+      }
+    } catch (err) {
+      console.error('Add expense error:', err);
+      showAlert('ข้อผิดพลาด', 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์', 'error');
+    }
   };
 
   const handleDeleteExpense = (id: string) => {
-    setExpenses(expenses.filter(e => e.id !== id));
+    setConfirmDeleteExpenseId(id);
+  };
+
+  const handleDeleteExpenseConfirmed = async (id: string) => {
+    try {
+      const res = await fetch(`${BASE_URL}/caregiver/expenses/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      if (res.ok) {
+        setExpenses(expenses.filter(e => e.id !== id));
+        showAlert('ลบแล้ว', 'ลบรายการเรียบร้อย', 'info');
+      } else {
+        const data = await res.json();
+        showAlert('ลบล้มเหลว', data.message || 'เกิดข้อผิดพลาดในการลบ', 'error');
+      }
+    } catch (err) {
+      console.error('Delete expense error:', err);
+      showAlert('ข้อผิดพลาด', 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์', 'error');
+    }
+    setConfirmDeleteExpenseId(null);
   };
 
   const handleNoteSubmit = (mood: string) => {
@@ -116,15 +256,83 @@ export default function DashboardScreen() {
     showAlert('ส่งรายงานสำเร็จ! ✅', reportMsg, 'success');
   };
 
-  const handleVitalSubmit = () => {
+  const handleVitalSubmit = async () => {
     if (healthMode === 'device') {
-        if (!sys || !dia) return showAlert("ข้อมูลไม่ครบ", "กรุณากรอกค่าความดัน", 'error');
-        if (parseInt(sys) > 140) showAlert("แจ้งเตือน!", "ความดันสูงกว่าปกติ\nให้คุณยายพัก 15 นาทีแล้ววัดใหม่", 'error');
-        else { showAlert("เรียบร้อย", "ค่าความดันปกติครับ", 'success'); setSys(''); setDia(''); setTimeout(() => setActiveTab('home'), 1500); }
+      if (!sys || !dia) {
+        return showAlert("ข้อมูลไม่ครบ", "กรุณากรอกค่าความดัน", 'error');
+      }
+      
+      try {
+        const res = await fetch(`${BASE_URL}/caregiver/health/blood-pressure`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            elderId: elderId,
+            caregiverId: caregiverId,
+            systolic: parseInt(sys),
+            diastolic: parseInt(dia),
+            heartRate: heartRate ? parseInt(heartRate) : undefined,
+            notes: ''
+          })
+        });
+        
+        const data = await res.json();
+        
+        if (res.ok) {
+          if (parseInt(sys) > 140) {
+            showAlert("แจ้งเตือน!", "ความดันสูงกว่าปกติ\nให้คุณยายพัก 15 นาทีแล้ววัดใหม่", 'error');
+          } else {
+            showAlert("บันทึกเรียบร้อย", "ค่าความดันปกติครับ", 'success');
+            setSys('');
+            setDia('');
+            setHeartRate('');
+            setTimeout(() => setActiveTab('home'), 1500);
+          }
+        } else {
+          showAlert('บันทึกล้มเหลว', data.message || 'เกิดข้อผิดพลาดในการบันทึก', 'error');
+        }
+      } catch (err) {
+        console.error('Submit vital error:', err);
+        showAlert('ข้อผิดพลาด', 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์', 'error');
+      }
     } else {
-        const msg = manualChecks.length === 0 ? "คุณยายอาการปกติ" : `บันทึกอาการ: ${manualChecks.join(', ')}`;
-        showAlert(manualChecks.length === 0 ? "ปกติ" : "บันทึกแล้ว", msg, manualChecks.length === 0 ? 'success' : 'info');
-        setManualChecks([]); setTimeout(() => setActiveTab('home'), 1500);
+      // Manual observation mode
+      try {
+        const observation = manualChecks.length === 0 
+          ? "คุณยายอาการปกติ" 
+          : manualChecks.join(', ');
+        
+        const res = await fetch(`${BASE_URL}/caregiver/health/observation`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            elderId: elderId,
+            caregiverId: caregiverId,
+            observation: observation,
+            notes: ''
+          })
+        });
+        
+        const data = await res.json();
+        
+        if (res.ok) {
+          const msg = manualChecks.length === 0 ? "คุณยายอาการปกติ" : `บันทึกอาการ: ${manualChecks.join(', ')}`;
+          showAlert(manualChecks.length === 0 ? "ปกติ" : "บันทึกแล้ว", msg, manualChecks.length === 0 ? 'success' : 'info');
+          setManualChecks([]);
+          setTimeout(() => setActiveTab('home'), 1500);
+        } else {
+          showAlert('บันทึกล้มเหลว', data.message || 'เกิดข้อผิดพลาดในการบันทึก', 'error');
+        }
+      } catch (err) {
+        console.error('Submit observation error:', err);
+        showAlert('ข้อผิดพลาด', 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์', 'error');
+      }
     }
   };
 
@@ -149,7 +357,7 @@ export default function DashboardScreen() {
           </div>
           <div>
             <p className="text-blue-100 text-xs">ผู้ดูแลของ:</p>
-            <p className="text-white text-lg font-bold">คุณยายสมศรี 👵</p>
+            <p className="text-white text-lg font-bold">{elderName} 👵</p>
           </div>
         </div>
         <button onClick={() => setShowSOS(true)} className="bg-red-500 hover:bg-red-600 text-white font-bold px-4 py-2 rounded-full shadow-lg active:scale-95 flex items-center gap-1 border-2 border-red-400 transition-transform">
@@ -196,24 +404,36 @@ export default function DashboardScreen() {
             <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
               <div className="w-1 h-6 bg-blue-500 rounded-full"></div>รายการทั้งหมด
             </h3>
-            <div className="space-y-3">
-              {tasks.map(task => (
-                <div key={task.id} onClick={() => setSelectedTask(task)} 
-                     className={`flex items-center p-4 rounded-2xl border-l-8 shadow-sm cursor-pointer transition-all hover:shadow-md ${task.status === 'done' ? 'bg-gray-100 border-gray-300 opacity-70' : 'bg-white border-blue-500'}`}>
-                  <div className={`w-14 h-14 rounded-xl flex items-center justify-center mr-4 font-bold text-lg ${task.status === 'done' ? 'bg-gray-200 text-gray-500' : 'bg-blue-50 text-blue-600'}`}>
-                    {task.time}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex justify-between items-center">
-                      <h4 className={`font-bold ${task.status === 'done' ? 'text-gray-500 line-through' : 'text-gray-800'}`}>{task.title}</h4>
-                      {task.status === 'done' && <CheckCircle size={20} className="text-green-500" />}
+            {loadingTasks ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                <p className="mt-2 text-sm text-gray-500">กำลังโหลดงาน...</p>
+              </div>
+            ) : tasks.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <ClipboardList size={48} className="mx-auto mb-2 opacity-20" />
+                <p>ยังไม่มีงานสำหรับวันนี้</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {tasks.map(task => (
+                  <div key={task.id} onClick={() => setSelectedTask(task)} 
+                      className={`flex items-center p-4 rounded-2xl border-l-8 shadow-sm cursor-pointer transition-all hover:shadow-md ${task.status === 'done' ? 'bg-gray-100 border-gray-300 opacity-70' : 'bg-white border-blue-500'}`}>
+                    <div className={`w-14 h-14 rounded-xl flex items-center justify-center mr-4 font-bold text-lg ${task.status === 'done' ? 'bg-gray-200 text-gray-500' : 'bg-blue-50 text-blue-600'}`}>
+                      {task.time}
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">{task.detail}</p>
+                    <div className="flex-1">
+                      <div className="flex justify-between items-center">
+                        <h4 className={`font-bold ${task.status === 'done' ? 'text-gray-500 line-through' : 'text-gray-800'}`}>{task.title}</h4>
+                        {task.status === 'done' && <CheckCircle size={20} className="text-green-500" />}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">{task.detail}</p>
+                    </div>
+                    {task.status !== 'done' && <ChevronRight className="text-gray-300" />}
                   </div>
-                  {task.status !== 'done' && <ChevronRight className="text-gray-300" />}
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -370,43 +590,50 @@ export default function DashboardScreen() {
               <ShoppingBag size={20} /> รายการวันนี้ ({expenses.length})
             </h3>
             
-            <div className="space-y-3">
-              {expenses.length === 0 ? (
-                <div className="text-gray-400 text-center py-12 bg-white rounded-3xl border-2 border-dashed border-gray-200">
-                  <ShoppingBag size={40} className="mb-2 opacity-50 mx-auto" />
-                  <p>ยังไม่มีรายการซื้อของ</p>
-                </div>
-              ) : (
-                expenses.map((ex, idx) => (
-                  <div key={ex.id} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
-                    <div className="flex justify-between items-start mb-3">
-                      <div className="flex items-center gap-4 flex-1">
-                        <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center text-green-700 font-bold text-lg shrink-0">{idx + 1}</div>
-                        <div className="flex-1">
-                          <span className="font-bold text-gray-700 text-lg block">{ex.item}</span>
-                          <span className="text-sm text-gray-500">{ex.date}</span>
+            {loadingExpenses ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                <p className="mt-2 text-sm text-gray-500">กำลังโหลดรายการ...</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {expenses.length === 0 ? (
+                  <div className="text-gray-400 text-center py-12 bg-white rounded-3xl border-2 border-dashed border-gray-200">
+                    <ShoppingBag size={40} className="mb-2 opacity-50 mx-auto" />
+                    <p>ยังไม่มีรายการซื้อของ</p>
+                  </div>
+                ) : (
+                  expenses.map((ex, idx) => (
+                    <div key={ex.id} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="flex items-center gap-4 flex-1">
+                          <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center text-green-700 font-bold text-lg shrink-0">{idx + 1}</div>
+                          <div className="flex-1">
+                            <span className="font-bold text-gray-700 text-lg block">{ex.item}</span>
+                            <span className="text-sm text-gray-500">{ex.date}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <span className="font-bold text-gray-900 text-xl">{ex.price}.-</span>
+                          <button onClick={() => handleDeleteExpense(ex.id)} className="p-2 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors">
+                            <Trash2 size={20} />
+                          </button>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4">
-                        <span className="font-bold text-gray-900 text-xl">{ex.price}.-</span>
-                        <button onClick={() => handleDeleteExpense(ex.id)} className="p-2 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors">
-                          <Trash2 size={20} />
-                        </button>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs px-3 py-1 rounded-full font-bold ${
+                          ex.addedBy === "caregiver" 
+                            ? "bg-blue-100 text-blue-700" 
+                            : "bg-purple-100 text-purple-700"
+                        }`}>
+                          {ex.addedBy === "caregiver" ? "👤 คุณเพิ่ม (ครอบครัวเห็น)" : "👨‍👩‍👧 ครอบครัวเพิ่ม"}
+                        </span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs px-3 py-1 rounded-full font-bold ${
-                        ex.addedBy === "caregiver" 
-                          ? "bg-blue-100 text-blue-700" 
-                          : "bg-purple-100 text-purple-700"
-                      }`}>
-                        {ex.addedBy === "caregiver" ? "👤 คุณเพิ่ม (ครอบครัวเห็น)" : "👨‍👩‍👧 ครอบครัวเพิ่ม"}
-                      </span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+                  ))
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -524,6 +751,44 @@ export default function DashboardScreen() {
               ))}
             </div>
             <button onClick={() => setShowSOS(false)} className="w-full py-4 bg-gray-100 rounded-2xl text-gray-600 font-bold text-lg hover:bg-gray-200">ยกเลิก</button>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Delete Expense Dialog */}
+      {confirmDeleteExpenseId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl animate-in fade-in zoom-in duration-200">
+            <div className="text-center mb-6">
+              <div className="bg-red-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle size={32} className="text-red-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-800 mb-2">
+                ยืนยันการลบรายการ
+              </h3>
+              <p className="text-gray-600 text-sm">
+                คุณแน่ใจหรือไม่ว่าต้องการลบรายการนี้?
+                <br />
+                การกระทำนี้ไม่สามารถย้อนกลับได้
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmDeleteExpenseId(null)}
+                className="flex-1 bg-gray-100 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-200 transition-colors"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={() => {
+                  handleDeleteExpenseConfirmed(confirmDeleteExpenseId);
+                  setConfirmDeleteExpenseId(null);
+                }}
+                className="flex-1 bg-red-600 text-white font-bold py-3 rounded-xl hover:bg-red-700 transition-colors"
+              >
+                ลบ
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -35,9 +35,6 @@ import {
   Pill,
 } from "lucide-react";
 import CustomAlert from "../CustomAlert";
-import MedicationsTab from "./MedicationsTab";
-import HealthRiskCard from "./HealthRiskCard";
-import WeeklyReportButton from "./WeeklyReportButton";
 
 interface Elder {
   id: string;
@@ -126,7 +123,8 @@ interface Attendance {
   isOvertime: boolean;
 }
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api";
+const BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api";
 
 interface Props {
   selectedElder: Elder;
@@ -137,14 +135,18 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
   const [editingBill, setEditingBill] = useState<Bill | null>(null);
   const [activeTab, setActiveTab] = useState("home");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [confirmDeleteActivityId, setConfirmDeleteActivityId] = useState<string | null>(null);
-  const [confirmDeleteBillId, setConfirmDeleteBillId] = useState<string | null>(null);
+  const [confirmDeleteActivityId, setConfirmDeleteActivityId] = useState<
+    string | null
+  >(null);
+  const [confirmDeleteBillId, setConfirmDeleteBillId] = useState<string | null>(
+    null
+  );
   const [caregivers, setCaregivers] = useState<Caregiver[]>([]);
   const [loadingCaregivers, setLoadingCaregivers] = useState(false);
   // Bills: API states
   const [bills, setBills] = useState<Bill[]>([]);
   const [loadingBills, setLoadingBills] = useState(false);
-  
+
   // กิจกรรม: API states
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loadingActivities, setLoadingActivities] = useState(false);
@@ -169,7 +171,7 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
         const billsData = Array.isArray(data)
           ? data.map((bill: any) => ({
               ...bill,
-              amount: Number(bill.amount)
+              amount: Number(bill.amount),
             }))
           : [];
         setBills(billsData);
@@ -220,27 +222,6 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
       });
   }, [selectedElder?.id, BASE_URL, token]);
 
-  // ดึง reports จาก backend
-  React.useEffect(() => {
-    if (!selectedElder?.id) {
-      setReports([]);
-      return;
-    }
-    setLoadingReports(true);
-    fetch(`${BASE_URL}/family/reports?elderId=${selectedElder.id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        setReports(Array.isArray(data) ? data : []);
-        setLoadingReports(false);
-      })
-      .catch(() => {
-        setReports([]);
-        setLoadingReports(false);
-      });
-  }, [selectedElder?.id, BASE_URL, token]);
-
   // ดึง notifications จาก backend
   React.useEffect(() => {
     setLoadingNotifications(true);
@@ -262,20 +243,55 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
   React.useEffect(() => {
     if (!selectedElder?.id) {
       setLatestHealth(null);
+      setHealthRecords([]);
       return;
     }
     setLoadingHealth(true);
+    // Fetch latest health record
     fetch(`${BASE_URL}/health/latest?elderId=${selectedElder.id}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => res.json())
       .then((data) => {
         setLatestHealth(data);
-        setLoadingHealth(false);
       })
       .catch(() => {
         setLatestHealth(null);
+      });
+    
+    // Fetch all health records
+    fetch(`${BASE_URL}/health/records?elderId=${selectedElder.id}&limit=20`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        setHealthRecords(Array.isArray(data) ? data : []);
         setLoadingHealth(false);
+      })
+      .catch(() => {
+        setHealthRecords([]);
+        setLoadingHealth(false);
+      });
+  }, [selectedElder?.id, BASE_URL, token]);
+
+  // ดึงข้อมูล Daily Reports สำหรับแสดง mood
+  React.useEffect(() => {
+    if (!selectedElder?.id) {
+      setReports([]);
+      return;
+    }
+    setLoadingReports(true);
+    fetch(`${BASE_URL}/family/reports?elderId=${selectedElder.id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        setReports(Array.isArray(data) ? data : []);
+        setLoadingReports(false);
+      })
+      .catch(() => {
+        setReports([]);
+        setLoadingReports(false);
       });
   }, [selectedElder?.id, BASE_URL, token]);
 
@@ -285,12 +301,12 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
       setCaregiverAttendances({});
       return;
     }
-    
+
     setLoadingAttendances(true);
     const currentDate = new Date();
     const month = currentDate.getMonth() + 1;
     const year = currentDate.getFullYear();
-    
+
     // ดึงข้อมูล attendance ของแต่ละผู้ดูแล
     Promise.all(
       caregivers.map(async (caregiver) => {
@@ -302,13 +318,16 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
             }
           );
           const data = await res.json();
-          return { caregiverId: caregiver.id, attendances: data.attendances || [] };
+          return {
+            caregiverId: caregiver.id,
+            attendances: data.attendances || [],
+          };
         } catch {
           return { caregiverId: caregiver.id, attendances: [] };
         }
       })
     ).then((results) => {
-      const attendanceMap: {[key: string]: Attendance[]} = {};
+      const attendanceMap: { [key: string]: Attendance[] } = {};
       results.forEach(({ caregiverId, attendances }) => {
         attendanceMap[caregiverId] = attendances;
       });
@@ -335,7 +354,9 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
   const [editingCaregiver, setEditingCaregiver] = useState<Caregiver | null>(
     null
   );
-  const [confirmDeleteCaregiverId, setConfirmDeleteCaregiverId] = useState<string | null>(null);
+  const [confirmDeleteCaregiverId, setConfirmDeleteCaregiverId] = useState<
+    string | null
+  >(null);
   const [caregiverName, setCaregiverName] = useState("");
   const [caregiverPhone, setCaregiverPhone] = useState("");
   const [caregiverEmail, setCaregiverEmail] = useState("");
@@ -350,14 +371,17 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
   const [caregiverEmergencyContact, setCaregiverEmergencyContact] =
     useState("");
   const [caregiverEmergencyName, setCaregiverEmergencyName] = useState("");
-  const [caregiverEmergencyRelation, setCaregiverEmergencyRelation] = useState("");
+  const [caregiverEmergencyRelation, setCaregiverEmergencyRelation] =
+    useState("");
   const [caregiverExperience, setCaregiverExperience] = useState("");
   const [caregiverCertificate, setCaregiverCertificate] = useState("");
   const [caregiverSalary, setCaregiverSalary] = useState("");
   const [caregiverSalaryType, setCaregiverSalaryType] = useState("monthly");
-  const [caregiverEmploymentType, setCaregiverEmploymentType] = useState("full-time");
+  const [caregiverEmploymentType, setCaregiverEmploymentType] =
+    useState("full-time");
   const [caregiverWorkSchedule, setCaregiverWorkSchedule] = useState("");
-  const [caregiverContractStartDate, setCaregiverContractStartDate] = useState("");
+  const [caregiverContractStartDate, setCaregiverContractStartDate] =
+    useState("");
   const [caregiverContractEndDate, setCaregiverContractEndDate] = useState("");
   const [caregiverWorkDays, setCaregiverWorkDays] = useState<string[]>([]);
   const [caregiverWorkTimeStart, setCaregiverWorkTimeStart] = useState("");
@@ -396,11 +420,6 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
   const [appointmentReminder, setAppointmentReminder] = useState(true);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
-  // Reports
-  const [showReportsModal, setShowReportsModal] = useState(false);
-  const [reports, setReports] = useState<any[]>([]);
-  const [loadingReports, setLoadingReports] = useState(false);
-
   // Notifications
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -408,227 +427,23 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
 
   // Health Status
   const [latestHealth, setLatestHealth] = useState<any>(null);
+  const [healthRecords, setHealthRecords] = useState<any[]>([]);
   const [loadingHealth, setLoadingHealth] = useState(false);
 
+  // Daily Reports for mood tracking
+  const [reports, setReports] = useState<any[]>([]);
+  const [loadingReports, setLoadingReports] = useState(false);
+
   // Caregiver Attendance
-  const [caregiverAttendances, setCaregiverAttendances] = useState<{[key: string]: Attendance[]}>({});
+  const [caregiverAttendances, setCaregiverAttendances] = useState<{
+    [key: string]: Attendance[];
+  }>({});
   const [loadingAttendances, setLoadingAttendances] = useState(false);
-  const [selectedCaregiverForAttendance, setSelectedCaregiverForAttendance] = useState<string | null>(null);
+  const [selectedCaregiverForAttendance, setSelectedCaregiverForAttendance] =
+    useState<string | null>(null);
 
   // Health Report Export
   const [showHealthReport, setShowHealthReport] = useState(false);
-
-  const generateHealthReport = () => {
-    const reportData = {
-      elder: selectedElder,
-      date: new Date().toLocaleDateString("th-TH", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      }),
-      caregivers: caregivers,
-      recentReports: reports.slice(0, 10),
-      activities: activities,
-    };
-
-    return reportData;
-  };
-
-  const exportHealthReport = () => {
-    const report = generateHealthReport();
-
-    // สร้าง PDF
-    const doc = new jsPDF();
-
-    let yPos = 20;
-
-    // === Header ===
-    doc.setFontSize(20);
-    doc.setFont("helvetica", "bold");
-    doc.text("รายงานสุขภาพ", 105, yPos, { align: "center" });
-
-    yPos += 8;
-    doc.setFontSize(16);
-    doc.text(report.elder.name, 105, yPos, { align: "center" });
-
-    yPos += 10;
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.text(`วันที่ออกรายงาน: ${report.date}`, 105, yPos, { align: "center" });
-
-    // === Separator Line ===
-    yPos += 5;
-    doc.setDrawColor(66, 153, 225);
-    doc.setLineWidth(0.5);
-    doc.line(20, yPos, 190, yPos);
-
-    yPos += 10;
-
-    // === ข้อมูลผู้สูงอายุ ===
-    doc.setFontSize(14);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(79, 70, 229);
-    doc.text("ข้อมูลผู้สูงอายุ", 20, yPos);
-
-    yPos += 8;
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(0, 0, 0);
-
-    doc.text(`ชื่อ: ${report.elder.name}`, 25, yPos);
-    yPos += 6;
-    doc.text(`อายุ: ${report.elder.age} ปี`, 25, yPos);
-    yPos += 6;
-    doc.text(`ความสัมพันธ์: ${report.elder.relation}`, 25, yPos);
-
-    yPos += 12;
-
-    // === ผู้ดูแล ===
-    doc.setFontSize(14);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(16, 185, 129);
-    doc.text("ผู้ดูแล", 20, yPos);
-
-    yPos += 8;
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(0, 0, 0);
-
-    report.caregivers.forEach((caregiver, index) => {
-      doc.text(`${index + 1}. ${caregiver.name}`, 25, yPos);
-      yPos += 5;
-      doc.setFontSize(9);
-      doc.text(`   โทร: ${caregiver.phone}`, 25, yPos);
-      yPos += 4;
-      doc.text(`   รหัสจับคู่: ${caregiver.pairingCode}`, 25, yPos);
-      yPos += 6;
-      doc.setFontSize(10);
-
-      if (yPos > 270) {
-        doc.addPage();
-        yPos = 20;
-      }
-    });
-
-    yPos += 6;
-
-    // === บันทึกสุขภาพล่าสุด ===
-    if (yPos > 250) {
-      doc.addPage();
-      yPos = 20;
-    }
-
-    doc.setFontSize(14);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(236, 72, 153);
-    doc.text("บันทึกสุขภาพล่าสุด", 20, yPos);
-
-    yPos += 8;
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(0, 0, 0);
-
-    report.recentReports.forEach((record, index) => {
-      if (yPos > 270) {
-        doc.addPage();
-        yPos = 20;
-      }
-
-      // Status badge
-      if (record.status === "success") {
-        doc.setFillColor(187, 247, 208); // Green background
-        doc.setTextColor(21, 128, 61); // Dark green text
-      } else {
-        doc.setFillColor(254, 243, 199); // Yellow background
-        doc.setTextColor(180, 83, 9); // Dark yellow text
-      }
-
-      doc.roundedRect(25, yPos - 3, 12, 5, 1, 1, "F");
-      doc.setFontSize(8);
-      doc.text(record.status === "success" ? "ปกติ" : "เฝ้า", 26, yPos, {
-        align: "left",
-      });
-
-      // Record info
-      doc.setTextColor(0, 0, 0);
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "bold");
-      doc.text(`${record.title}`, 40, yPos);
-
-      yPos += 5;
-      doc.setFontSize(9);
-      doc.setFont("helvetica", "normal");
-      doc.text(`${record.date} ${record.time}`, 40, yPos);
-
-      yPos += 5;
-      // Wrap long text
-      const detailLines = doc.splitTextToSize(record.details, 150);
-      doc.text(detailLines, 40, yPos);
-      yPos += detailLines.length * 4 + 4;
-    });
-
-    yPos += 6;
-
-    // === กิจกรรมที่กำหนดไว้ ===
-    if (yPos > 250) {
-      doc.addPage();
-      yPos = 20;
-    }
-
-    const pendingActivities = report.activities.filter((a) => !a.completed);
-
-    if (pendingActivities.length > 0) {
-      doc.setFontSize(14);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(99, 102, 241);
-      doc.text("กิจกรรมที่กำหนดไว้", 20, yPos);
-
-      yPos += 8;
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(0, 0, 0);
-
-      pendingActivities.forEach((activity, index) => {
-        if (yPos > 270) {
-          doc.addPage();
-          yPos = 20;
-        }
-
-        doc.setFont("helvetica", "bold");
-        doc.text(`${activity.time} - ${activity.title}`, 25, yPos);
-        yPos += 5;
-
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(9);
-        const activityLines = doc.splitTextToSize(activity.description, 160);
-        doc.text(activityLines, 25, yPos);
-        yPos += activityLines.length * 4 + 5;
-        doc.setFontSize(10);
-      });
-    }
-
-    // === Footer ===
-    const pageCount = doc.getNumberOfPages();
-    for (let i = 1; i <= pageCount; i++) {
-      doc.setPage(i);
-      doc.setFontSize(8);
-      doc.setTextColor(150, 150, 150);
-      doc.text(`หน้า ${i} จาก ${pageCount}`, 105, 290, { align: "center" });
-      doc.text("สร้างโดยระบบ CareLink", 105, 285, { align: "center" });
-    }
-
-    // บันทึกไฟล์
-    const fileName = `รายงานสุขภาพ-${selectedElder.name.replace(/\s/g, "-")}-${
-      new Date().toISOString().split("T")[0]
-    }.pdf`;
-    doc.save(fileName);
-
-    showAlertMessage(
-      "ส่งออกสำเร็จ",
-      "ดาวน์โหลดรายงานสุขภาพ PDF เรียบร้อย",
-      "success"
-    );
-  };
 
   const showAlertMessage = (
     title: string,
@@ -685,30 +500,18 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
       }
     } else {
       if (!caregiverContractStartDate) {
-        showAlertMessage(
-          "ข้อมูลไม่ครบ",
-          "กรุณาระบุวันที่เริ่มงาน",
-          "error"
-        );
+        showAlertMessage("ข้อมูลไม่ครบ", "กรุณาระบุวันที่เริ่มงาน", "error");
         return;
       }
     }
 
     if (caregiverWorkDays.length === 0) {
-      showAlertMessage(
-        "ข้อมูลไม่ครบ",
-        "กรุณาเลือกวันทำงาน",
-        "error"
-      );
+      showAlertMessage("ข้อมูลไม่ครบ", "กรุณาเลือกวันทำงาน", "error");
       return;
     }
 
     if (!caregiverWorkTimeStart || !caregiverWorkTimeEnd) {
-      showAlertMessage(
-        "ข้อมูลไม่ครบ",
-        "กรุณาระบุเวลาทำงาน",
-        "error"
-      );
+      showAlertMessage("ข้อมูลไม่ครบ", "กรุณาระบุเวลาทำงาน", "error");
       return;
     }
 
@@ -720,47 +523,55 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
       thu: "พฤ",
       fri: "ศ",
       sat: "ส",
-      sun: "อา"
+      sun: "อา",
     };
-    const selectedDaysText = caregiverWorkDays.map(d => daysMap[d]).join(", ");
+    const selectedDaysText = caregiverWorkDays
+      .map((d) => daysMap[d])
+      .join(", ");
     const workScheduleText = `${selectedDaysText} ${caregiverWorkTimeStart}-${caregiverWorkTimeEnd}`;
 
     try {
       if (editingCaregiver) {
         // Update existing caregiver
-        const res = await fetch(`${BASE_URL}/family/caregivers/${editingCaregiver.id}`, {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            name: caregiverName,
-            phone: caregiverPhone,
-            email: caregiverEmail,
-            gender: caregiverGender || null,
-            dateOfBirth: caregiverDateOfBirth || null,
-            idCard: caregiverIdCard,
-            address: caregiverAddress,
-            subDistrict: caregiverSubDistrict || null,
-            district: caregiverDistrict || null,
-            province: caregiverProvince || null,
-            postalCode: caregiverPostalCode || null,
-            emergencyContact: caregiverEmergencyContact,
-            emergencyName: caregiverEmergencyName,
-            emergencyRelation: caregiverEmergencyRelation || null,
-            experience: caregiverExperience,
-            certificate: caregiverCertificate,
-            salary: caregiverSalary ? parseFloat(caregiverSalary) : null, // แปลงเป็น decimal
-            salaryType: caregiverSalaryType,
-            employmentType: caregiverEmploymentType,
-            workSchedule: workScheduleText,
-            contractStartDate: caregiverContractStartDate || null,
-            contractEndDate: caregiverEmploymentType === "contract" ? caregiverContractEndDate : null,
-            idCardImage: caregiverIdCardImage || null,
-            certificateImage: caregiverCertificateImage || null,
-          }),
-        });
+        const res = await fetch(
+          `${BASE_URL}/family/caregivers/${editingCaregiver.id}`,
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              name: caregiverName,
+              phone: caregiverPhone,
+              email: caregiverEmail,
+              gender: caregiverGender || null,
+              dateOfBirth: caregiverDateOfBirth || null,
+              idCard: caregiverIdCard,
+              address: caregiverAddress,
+              subDistrict: caregiverSubDistrict || null,
+              district: caregiverDistrict || null,
+              province: caregiverProvince || null,
+              postalCode: caregiverPostalCode || null,
+              emergencyContact: caregiverEmergencyContact,
+              emergencyName: caregiverEmergencyName,
+              emergencyRelation: caregiverEmergencyRelation || null,
+              experience: caregiverExperience,
+              certificate: caregiverCertificate,
+              salary: caregiverSalary ? parseFloat(caregiverSalary) : null, // แปลงเป็น decimal
+              salaryType: caregiverSalaryType,
+              employmentType: caregiverEmploymentType,
+              workSchedule: workScheduleText,
+              contractStartDate: caregiverContractStartDate || null,
+              contractEndDate:
+                caregiverEmploymentType === "contract"
+                  ? caregiverContractEndDate
+                  : null,
+              idCardImage: caregiverIdCardImage || null,
+              certificateImage: caregiverCertificateImage || null,
+            }),
+          }
+        );
         const data = await res.json();
         if (res.ok && data.id) {
           showAlertMessage(
@@ -816,7 +627,10 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
             employmentType: caregiverEmploymentType,
             workSchedule: workScheduleText,
             contractStartDate: caregiverContractStartDate || null,
-            contractEndDate: caregiverEmploymentType === "contract" ? caregiverContractEndDate : null,
+            contractEndDate:
+              caregiverEmploymentType === "contract"
+                ? caregiverContractEndDate
+                : null,
             idCardImage: caregiverIdCardImage || null,
             certificateImage: caregiverCertificateImage || null,
             elderId: selectedElder.id,
@@ -852,7 +666,11 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
       // Reset form
       handleCancelCaregiverForm();
     } catch {
-      showAlertMessage("ข้อผิดพลาด", "เกิดข้อผิดพลาดในการบันทึกข้อมูล", "error");
+      showAlertMessage(
+        "ข้อผิดพลาด",
+        "เกิดข้อผิดพลาดในการบันทึกข้อมูล",
+        "error"
+      );
     }
   };
 
@@ -862,14 +680,14 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
     setCaregiverPhone(caregiver.phone);
     setCaregiverEmail(caregiver.email);
     setCaregiverGender(caregiver.gender || "");
-    
+
     // แปลง DateTime เป็น YYYY-MM-DD สำหรับ input type="date"
     const formatDateForInput = (dateString?: string) => {
       if (!dateString) return "";
       const date = new Date(dateString);
-      return date.toISOString().split('T')[0];
+      return date.toISOString().split("T")[0];
     };
-    
+
     setCaregiverDateOfBirth(formatDateForInput(caregiver.dateOfBirth));
     setCaregiverIdCard(caregiver.idCard);
     setCaregiverAddress(caregiver.address);
@@ -885,11 +703,13 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
     setCaregiverSalary(caregiver.salary);
     setCaregiverSalaryType(caregiver.salaryType);
     setCaregiverEmploymentType(caregiver.employmentType);
-    setCaregiverContractStartDate(formatDateForInput(caregiver.contractStartDate));
+    setCaregiverContractStartDate(
+      formatDateForInput(caregiver.contractStartDate)
+    );
     setCaregiverContractEndDate(formatDateForInput(caregiver.contractEndDate));
     setCaregiverIdCardImage(caregiver.idCardImage || "");
     setCaregiverCertificateImage(caregiver.certificateImage || "");
-    
+
     // Parse workSchedule to extract days and time
     if (caregiver.workSchedule) {
       // Format: "จ, อ, พ 08:00-17:00"
@@ -897,15 +717,24 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
       if (parts.length >= 2) {
         const daysText = parts.slice(0, -1).join(" ");
         const timeRange = parts[parts.length - 1];
-        
+
         // Map Thai days back to English
         const reverseDaysMap: { [key: string]: string } = {
-          "จ": "mon", "อ": "tue", "พ": "wed", "พฤ": "thu",
-          "ศ": "fri", "ส": "sat", "อา": "sun"
+          จ: "mon",
+          อ: "tue",
+          พ: "wed",
+          พฤ: "thu",
+          ศ: "fri",
+          ส: "sat",
+          อา: "sun",
         };
-        const daysList = daysText.split(",").map(d => d.trim()).map(d => reverseDaysMap[d]).filter(Boolean);
+        const daysList = daysText
+          .split(",")
+          .map((d) => d.trim())
+          .map((d) => reverseDaysMap[d])
+          .filter(Boolean);
         setCaregiverWorkDays(daysList);
-        
+
         if (timeRange.includes("-")) {
           const [start, end] = timeRange.split("-");
           setCaregiverWorkTimeStart(start);
@@ -917,7 +746,7 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
       setCaregiverWorkTimeStart("");
       setCaregiverWorkTimeEnd("");
     }
-    
+
     setShowCaregiverForm(true);
   };
 
@@ -998,7 +827,11 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
       });
       const data = await res.json();
       if (res.ok) {
-        showAlertMessage("ยืนยันสำเร็จ", `ยืนยันตัวตน ${name} เรียบร้อย`, "success");
+        showAlertMessage(
+          "ยืนยันสำเร็จ",
+          `ยืนยันตัวตน ${name} เรียบร้อย`,
+          "success"
+        );
         setLoadingCaregivers(true);
         setTimeout(() => {
           fetch(`${BASE_URL}/family/caregivers?elderId=${selectedElder.id}`, {
@@ -1051,7 +884,11 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
           setBillCategory("");
           setEditingBill(null);
           setShowBillForm(false);
-          showAlertMessage("แก้ไขสำเร็จ", "แก้ไขรายการบัญชีเรียบร้อย", "success");
+          showAlertMessage(
+            "แก้ไขสำเร็จ",
+            "แก้ไขรายการบัญชีเรียบร้อย",
+            "success"
+          );
           setLoadingBills(true);
           setTimeout(() => reloadBills(), 300);
         } else {
@@ -1082,7 +919,11 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
           setBillAmount("");
           setBillCategory("");
           setShowBillForm(false);
-          showAlertMessage("เพิ่มสำเร็จ", "เพิ่มรายการบัญชีเรียบร้อย", "success");
+          showAlertMessage(
+            "เพิ่มสำเร็จ",
+            "เพิ่มรายการบัญชีเรียบร้อย",
+            "success"
+          );
           setLoadingBills(true);
           setTimeout(() => reloadBills(), 300);
         } else {
@@ -1094,7 +935,11 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
         }
       }
     } catch {
-      showAlertMessage("ข้อผิดพลาด", "เกิดข้อผิดพลาดในการบันทึกข้อมูล", "error");
+      showAlertMessage(
+        "ข้อผิดพลาด",
+        "เกิดข้อผิดพลาดในการบันทึกข้อมูล",
+        "error"
+      );
     }
   };
 
@@ -1106,10 +951,10 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
       .then((res) => res.json())
       .then((data) => {
         // แปลง amount เป็น number เพื่อป้องกันการต่อ string
-        const billsData = Array.isArray(data) 
+        const billsData = Array.isArray(data)
           ? data.map((bill: any) => ({
               ...bill,
-              amount: Number(bill.amount)
+              amount: Number(bill.amount),
             }))
           : [];
         setBills(billsData);
@@ -1136,7 +981,11 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
         );
       }
     } catch {
-      showAlertMessage("ข้อผิดพลาด", "เกิดข้อผิดพลาดในการเปลี่ยนสถานะ", "error");
+      showAlertMessage(
+        "ข้อผิดพลาด",
+        "เกิดข้อผิดพลาดในการเปลี่ยนสถานะ",
+        "error"
+      );
     }
   };
 
@@ -1157,7 +1006,11 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
         setLoadingBills(true);
         setTimeout(() => reloadBills(), 300);
       } else {
-        showAlertMessage("ลบล้มเหลว", data.message || "เกิดข้อผิดพลาดในการลบ", "error");
+        showAlertMessage(
+          "ลบล้มเหลว",
+          data.message || "เกิดข้อผิดพลาดในการลบ",
+          "error"
+        );
       }
     } catch {
       showAlertMessage("ข้อผิดพลาด", "เกิดข้อผิดพลาดในการลบข้อมูล", "error");
@@ -1244,7 +1097,11 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
         }
       }
     } catch {
-      showAlertMessage("ข้อผิดพลาด", "เกิดข้อผิดพลาดในการบันทึกกิจกรรม", "error");
+      showAlertMessage(
+        "ข้อผิดพลาด",
+        "เกิดข้อผิดพลาดในการบันทึกกิจกรรม",
+        "error"
+      );
     }
   };
 
@@ -1279,7 +1136,11 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
         );
       }
     } catch {
-      showAlertMessage("ข้อผิดพลาด", "เกิดข้อผิดพลาดในการเปลี่ยนสถานะกิจกรรม", "error");
+      showAlertMessage(
+        "ข้อผิดพลาด",
+        "เกิดข้อผิดพลาดในการเปลี่ยนสถานะกิจกรรม",
+        "error"
+      );
     }
   };
 
@@ -1301,7 +1162,11 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
         setLoadingActivities(true);
         setTimeout(() => reloadActivities(), 300);
       } else {
-        showAlertMessage("ลบล้มเหลว", data.message || "เกิดข้อผิดพลาดในการลบกิจกรรม", "error");
+        showAlertMessage(
+          "ลบล้มเหลว",
+          data.message || "เกิดข้อผิดพลาดในการลบกิจกรรม",
+          "error"
+        );
       }
     } catch {
       showAlertMessage("ข้อผิดพลาด", "เกิดข้อผิดพลาดในการลบกิจกรรม", "error");
@@ -1318,7 +1183,7 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
     setActivityDate(activity.date);
     setShowActivityForm(true);
     setTimeout(() => {
-      window.scrollTo({ top: 0, behavior: 'auto' });
+      window.scrollTo({ top: 0, behavior: "auto" });
     }, 100);
   };
 
@@ -1481,7 +1346,7 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
     setShowAppointmentForm(true);
     // Scroll to top instantly
     setTimeout(() => {
-      window.scrollTo({ top: 0, behavior: 'auto' });
+      window.scrollTo({ top: 0, behavior: "auto" });
     }, 100);
   };
 
@@ -1629,10 +1494,10 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
   const formatDateDisplay = (dateString?: string | null) => {
     if (!dateString) return "-";
     const date = new Date(dateString);
-    return date.toLocaleDateString('th-TH', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
+    return date.toLocaleDateString("th-TH", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
     });
   };
 
@@ -1640,27 +1505,44 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
   const formatTime = (dateTimeString?: string | null) => {
     if (!dateTimeString) return "-";
     const date = new Date(dateTimeString);
-    return date.toLocaleTimeString('th-TH', {
-      hour: '2-digit',
-      minute: '2-digit'
+    return date.toLocaleTimeString("th-TH", {
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
   // Get today's attendance for a caregiver
   const getTodayAttendance = (caregiverId: string): Attendance | null => {
     const attendances = caregiverAttendances[caregiverId] || [];
-    const today = new Date().toISOString().split('T')[0];
-    return attendances.find(att => att.workDate.split('T')[0] === today) || null;
+    const today = new Date().toISOString().split("T")[0];
+    return (
+      attendances.find((att) => att.workDate.split("T")[0] === today) || null
+    );
   };
 
   // Get attendance status badge
   const getAttendanceStatusBadge = (status: string) => {
-    const statusConfig: {[key: string]: {label: string, color: string}} = {
-      present: { label: 'มาทำงาน', color: 'bg-green-100 text-green-700 border-green-200' },
-      late: { label: 'มาสาย', color: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
-      absent: { label: 'ขาดงาน', color: 'bg-red-100 text-red-700 border-red-200' },
-      'on-leave': { label: 'ลา', color: 'bg-blue-100 text-blue-700 border-blue-200' },
-      pending: { label: 'ยังไม่เข้างาน', color: 'bg-gray-100 text-gray-600 border-gray-200' },
+    const statusConfig: { [key: string]: { label: string; color: string } } = {
+      present: {
+        label: "มาทำงาน",
+        color: "bg-green-100 text-green-700 border-green-200",
+      },
+      late: {
+        label: "มาสาย",
+        color: "bg-yellow-100 text-yellow-700 border-yellow-200",
+      },
+      absent: {
+        label: "ขาดงาน",
+        color: "bg-red-100 text-red-700 border-red-200",
+      },
+      "on-leave": {
+        label: "ลา",
+        color: "bg-blue-100 text-blue-700 border-blue-200",
+      },
+      pending: {
+        label: "ยังไม่เข้างาน",
+        color: "bg-gray-100 text-gray-600 border-gray-200",
+      },
     };
     const config = statusConfig[status] || statusConfig.pending;
     return (
@@ -1740,27 +1622,39 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                 ) : latestHealth ? (
                   <>
                     <p className="text-2xl font-bold text-gray-800">
-                      {latestHealth.type === 'blood_pressure' && latestHealth.bloodPressure
+                      {latestHealth.type === "blood_pressure" &&
+                      latestHealth.bloodPressure
                         ? `${latestHealth.bloodPressure}`
-                        : latestHealth.type === 'blood_sugar' && latestHealth.bloodSugar
+                        : latestHealth.type === "blood_sugar" &&
+                          latestHealth.bloodSugar
                         ? `${latestHealth.bloodSugar} mg/dL`
-                        : latestHealth.type === 'temperature' && latestHealth.temperature
+                        : latestHealth.type === "temperature" &&
+                          latestHealth.temperature
                         ? `${latestHealth.temperature}°C`
-                        : latestHealth.type === 'weight' && latestHealth.weight
+                        : latestHealth.type === "weight" && latestHealth.weight
                         ? `${latestHealth.weight} kg`
-                        : 'บันทึกแล้ว'}
+                        : "บันทึกแล้ว"}
                     </p>
                     <p className="text-xs text-green-600 font-medium mt-1">
-                      {latestHealth.type === 'blood_pressure' ? 'ความดัน' :
-                       latestHealth.type === 'blood_sugar' ? 'น้ำตาล' :
-                       latestHealth.type === 'temperature' ? 'อุณหภูมิ' :
-                       latestHealth.type === 'weight' ? 'น้ำหนัก' : 'สุขภาพ'} •{' '}
-                      {new Date(latestHealth.recordedAt).toLocaleDateString('th-TH', {
-                        day: 'numeric',
-                        month: 'short',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
+                      {latestHealth.type === "blood_pressure"
+                        ? "ความดัน"
+                        : latestHealth.type === "blood_sugar"
+                        ? "น้ำตาล"
+                        : latestHealth.type === "temperature"
+                        ? "อุณหภูมิ"
+                        : latestHealth.type === "weight"
+                        ? "น้ำหนัก"
+                        : "สุขภาพ"}{" "}
+                      •{" "}
+                      {new Date(latestHealth.recordedAt).toLocaleDateString(
+                        "th-TH",
+                        {
+                          day: "numeric",
+                          month: "short",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        }
+                      )}
                     </p>
                   </>
                 ) : (
@@ -1786,14 +1680,6 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
               </div>
             </div>
 
-            {/* Health Risk Score Card */}
-            {selectedElder && (
-              <HealthRiskCard 
-                elderId={selectedElder.id} 
-                elderName={selectedElder.name} 
-              />
-            )}
-
             {/* Quick Stats */}
             <div className="bg-gradient-to-br from-orange-500 to-red-500 rounded-3xl p-6 text-white shadow-lg">
               <div className="flex justify-between items-start mb-4">
@@ -1812,72 +1698,6 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                 <span className="text-orange-100">
                   รวมทั้งหมด: {totalBills.toLocaleString()} บาท
                 </span>
-              </div>
-            </div>
-
-            {/* Latest Reports */}
-            <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                  <FileText size={20} className="text-blue-500" />
-                  รายงานล่าสุด
-                </h3>
-                <div className="flex items-center gap-2">
-                  {selectedElder && (
-                    <WeeklyReportButton 
-                      elderId={selectedElder.id} 
-                      elderName={selectedElder.name} 
-                    />
-                  )}
-                  <button
-                    onClick={() => setShowReportsModal(true)}
-                    className="text-blue-600 text-sm font-bold flex items-center gap-1 hover:text-blue-700 active:scale-95 transition-all"
-                  >
-                    ดูทั้งหมด <ChevronRight size={16} />
-                  </button>
-                </div>
-              </div>
-              <div className="space-y-3">
-                {loadingReports ? (
-                  <div className="text-center py-6 text-gray-500">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
-                  </div>
-                ) : reports.length === 0 ? (
-                  <div className="text-center py-6 text-gray-500">
-                    <FileText size={32} className="mx-auto mb-2 opacity-20" />
-                    <p className="text-sm">ยังไม่มีรายงาน</p>
-                  </div>
-                ) : (
-                  reports.slice(0, 3).map((report) => (
-                    <div
-                      key={report.id}
-                      className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer"
-                      onClick={() => setShowReportsModal(true)}
-                    >
-                      <div className="w-10 h-10 rounded-full flex items-center justify-center bg-blue-100">
-                        <FileText size={20} className="text-blue-600" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-bold text-gray-800 text-sm">
-                          รายงานประจำวัน
-                          {report.caregiver && ` - ${report.caregiver.name}`}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {new Date(report.date).toLocaleDateString('th-TH')}
-                        </p>
-                      </div>
-                      <div
-                        className={`px-2 py-1 rounded-full text-xs font-bold ${
-                          report.status === "read"
-                            ? "bg-green-100 text-green-700"
-                            : "bg-blue-100 text-blue-700"
-                        }`}
-                      >
-                        {report.status === "read" ? "✓" : "•"}
-                      </div>
-                    </div>
-                  ))
-                )}
               </div>
             </div>
 
@@ -1960,7 +1780,9 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                         placeholder="วันเกิด"
                         className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800"
                         value={caregiverDateOfBirth}
-                        onChange={(e) => setCaregiverDateOfBirth(e.target.value)}
+                        onChange={(e) =>
+                          setCaregiverDateOfBirth(e.target.value)
+                        }
                       />
                       <input
                         type="text"
@@ -1994,7 +1816,9 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                           placeholder="ตำบล/แขวง"
                           className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800"
                           value={caregiverSubDistrict}
-                          onChange={(e) => setCaregiverSubDistrict(e.target.value)}
+                          onChange={(e) =>
+                            setCaregiverSubDistrict(e.target.value)
+                          }
                         />
                         <input
                           type="text"
@@ -2018,7 +1842,11 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                           maxLength={5}
                           className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800"
                           value={caregiverPostalCode}
-                          onChange={(e) => setCaregiverPostalCode(e.target.value.replace(/\D/g, ""))}
+                          onChange={(e) =>
+                            setCaregiverPostalCode(
+                              e.target.value.replace(/\D/g, "")
+                            )
+                          }
                         />
                       </div>
                     </div>
@@ -2092,40 +1920,52 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                       <select
                         className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800"
                         value={caregiverEmploymentType}
-                        onChange={(e) => setCaregiverEmploymentType(e.target.value)}
+                        onChange={(e) =>
+                          setCaregiverEmploymentType(e.target.value)
+                        }
                       >
                         <option value="full-time">ประจำ (Full-time)</option>
                         <option value="part-time">พาร์ทไทม์ (Part-time)</option>
                         <option value="contract">สัญญาจ้าง (Contract)</option>
                       </select>
-                      
+
                       {/* วันที่เริ่มทำงาน (ทุกประเภท) */}
                       <div>
-                        <label className="block text-sm text-gray-600 mb-1">วันที่เริ่มงาน *</label>
+                        <label className="block text-sm text-gray-600 mb-1">
+                          วันที่เริ่มงาน *
+                        </label>
                         <input
                           type="date"
                           className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800"
                           value={caregiverContractStartDate}
-                          onChange={(e) => setCaregiverContractStartDate(e.target.value)}
+                          onChange={(e) =>
+                            setCaregiverContractStartDate(e.target.value)
+                          }
                         />
                       </div>
-                      
+
                       {/* วันที่สิ้นสุด (เฉพาะสัญญาจ้าง) */}
                       {caregiverEmploymentType === "contract" && (
                         <div>
-                          <label className="block text-sm text-gray-600 mb-1">วันที่สิ้นสุดสัญญา *</label>
+                          <label className="block text-sm text-gray-600 mb-1">
+                            วันที่สิ้นสุดสัญญา *
+                          </label>
                           <input
                             type="date"
                             className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800"
                             value={caregiverContractEndDate}
-                            onChange={(e) => setCaregiverContractEndDate(e.target.value)}
+                            onChange={(e) =>
+                              setCaregiverContractEndDate(e.target.value)
+                            }
                           />
                         </div>
                       )}
-                      
+
                       {/* เลือกวันทำงาน */}
                       <div>
-                        <label className="block text-sm text-gray-600 mb-2">เลือกวันทำงาน *</label>
+                        <label className="block text-sm text-gray-600 mb-2">
+                          เลือกวันทำงาน *
+                        </label>
                         <div className="grid grid-cols-4 gap-2">
                           {[
                             { key: "mon", label: "จ" },
@@ -2141,9 +1981,16 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                               type="button"
                               onClick={() => {
                                 if (caregiverWorkDays.includes(day.key)) {
-                                  setCaregiverWorkDays(caregiverWorkDays.filter(d => d !== day.key));
+                                  setCaregiverWorkDays(
+                                    caregiverWorkDays.filter(
+                                      (d) => d !== day.key
+                                    )
+                                  );
                                 } else {
-                                  setCaregiverWorkDays([...caregiverWorkDays, day.key]);
+                                  setCaregiverWorkDays([
+                                    ...caregiverWorkDays,
+                                    day.key,
+                                  ]);
                                 }
                               }}
                               className={`p-2 rounded-lg border-2 transition-colors ${
@@ -2157,29 +2004,37 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                           ))}
                         </div>
                       </div>
-                      
+
                       {/* เวลาทำงาน */}
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-sm text-gray-600 mb-1">เวลาเริ่ม *</label>
+                          <label className="block text-sm text-gray-600 mb-1">
+                            เวลาเริ่ม *
+                          </label>
                           <input
                             type="time"
                             className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800"
                             value={caregiverWorkTimeStart}
-                            onChange={(e) => setCaregiverWorkTimeStart(e.target.value)}
+                            onChange={(e) =>
+                              setCaregiverWorkTimeStart(e.target.value)
+                            }
                           />
                         </div>
                         <div>
-                          <label className="block text-sm text-gray-600 mb-1">เวลาสิ้นสุด *</label>
+                          <label className="block text-sm text-gray-600 mb-1">
+                            เวลาสิ้นสุด *
+                          </label>
                           <input
                             type="time"
                             className="w-full p-3 bg-gray-50 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-800"
                             value={caregiverWorkTimeEnd}
-                            onChange={(e) => setCaregiverWorkTimeEnd(e.target.value)}
+                            onChange={(e) =>
+                              setCaregiverWorkTimeEnd(e.target.value)
+                            }
                           />
                         </div>
                       </div>
-                      
+
                       <input
                         type="text"
                         placeholder="ประสบการณ์ (ปี)"
@@ -2293,364 +2148,428 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                 </div>
               ) : (
                 caregivers.map((caregiver) => (
-                <div
-                  key={caregiver.id}
-                  className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100"
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-purple-100 rounded-2xl flex items-center justify-center text-purple-600 font-bold text-xl">
-                        {caregiver.name.charAt(0)}
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-bold text-gray-800">
-                          {caregiver.name}
-                        </h3>
-                        <div className="flex items-center gap-2 mt-1">
-                          {caregiver.verified ? (
-                            <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-bold flex items-center gap-1">
-                              <CheckCircle2 size={12} /> ยืนยันแล้ว
-                            </span>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full font-bold">
-                                รอยืนยัน
+                  <div
+                    key={caregiver.id}
+                    className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 bg-purple-100 rounded-2xl flex items-center justify-center text-purple-600 font-bold text-xl">
+                          {caregiver.name.charAt(0)}
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-bold text-gray-800">
+                            {caregiver.name}
+                          </h3>
+                          <div className="flex items-center gap-2 mt-1">
+                            {caregiver.verified ? (
+                              <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-bold flex items-center gap-1">
+                                <CheckCircle2 size={12} /> ยืนยันแล้ว
                               </span>
-                              <button
-                                onClick={() => handleVerifyCaregiver(caregiver.id, caregiver.name)}
-                                className="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-full font-bold transition-colors flex items-center gap-1"
-                                title="ยืนยันตัวตนผู้ดูแล"
-                              >
-                                <CheckCircle2 size={12} /> ยืนยัน
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleEditCaregiver(caregiver)}
-                        className="p-2 bg-blue-50 rounded-xl hover:bg-blue-100 text-blue-600 transition-colors"
-                      >
-                        <Edit size={18} />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteCaregiver(caregiver.id)}
-                        className="p-2 bg-red-50 rounded-xl hover:bg-red-100 text-red-600 transition-colors"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* ข้อมูลหลัก */}
-                  <div className="grid grid-cols-2 gap-2 text-sm mb-3">
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <Phone size={14} className="shrink-0" />
-                      <span className="truncate">{caregiver.phone}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <Send size={14} className="shrink-0" />
-                      <span className="truncate">{caregiver.email}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <User size={14} className="shrink-0" />
-                      <span className="truncate">
-                        บัตร: {caregiver.idCard.slice(0, 3)}***
-                        {caregiver.idCard.slice(-4)}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <Clock size={14} className="shrink-0" />
-                      <span className="truncate">
-                        เริ่ม: {formatDateDisplay(caregiver.startDate)}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Pairing Code */}
-                  <div className="bg-gradient-to-r from-purple-100 to-blue-100 rounded-xl p-3 mb-3 border-2 border-dashed border-purple-300">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <p className="text-xs text-purple-700 font-medium mb-1">
-                          รหัสจับคู่ (Pairing Code)
-                        </p>
-                        <p className="text-2xl font-bold text-purple-900 tracking-widest">
-                          {caregiver.pairingCode}
-                        </p>
-                        <p className="text-xs text-purple-600 mt-2">
-                          ผู้ดูแลใช้รหัสนี้เพื่อจับคู่กับผู้สูงอายุ
-                        </p>
-                      </div>
-                      <button
-                        onClick={() =>
-                          copyPairingCode(caregiver.pairingCode, caregiver.name)
-                        }
-                        className="bg-white hover:bg-purple-50 p-3 rounded-xl transition-colors border border-purple-200 active:scale-95"
-                        title="คัดลอกรหัส"
-                      >
-                        <Copy size={20} className="text-purple-600" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* รายละเอียดเพิ่มเติม - Collapsible */}
-                  <details className="group">
-                    <summary className="cursor-pointer text-purple-600 font-bold text-sm flex items-center gap-1 hover:text-purple-700 transition-colors">
-                      <ChevronRight
-                        size={16}
-                        className="group-open:rotate-90 transition-transform"
-                      />
-                      ดูรายละเอียดเพิ่มเติม
-                    </summary>
-                    <div className="mt-3 pt-3 border-t space-y-2 text-sm">
-                      <div className="bg-gray-50 p-3 rounded-xl">
-                        <p className="text-xs text-gray-500 font-medium mb-1">
-                          ที่อยู่
-                        </p>
-                        <p className="text-gray-700">{caregiver.address}</p>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="bg-gray-50 p-3 rounded-xl">
-                          <p className="text-xs text-gray-500 font-medium mb-1">
-                            ผู้ติดต่อฉุกเฉิน
-                          </p>
-                          <p className="text-gray-700 font-bold text-xs">
-                            {caregiver.emergencyName}
-                          </p>
-                          <p className="text-gray-600 text-xs">
-                            {caregiver.emergencyContact}
-                          </p>
-                        </div>
-                        <div className="bg-gray-50 p-3 rounded-xl">
-                          <p className="text-xs text-gray-500 font-medium mb-1">
-                            ประสบการณ์
-                          </p>
-                          <p className="text-gray-700 font-bold">
-                            {caregiver.experience} ปี
-                          </p>
-                        </div>
-                      </div>
-
-                      {(caregiver.dateOfBirth || caregiver.gender) && (
-                        <div className="grid grid-cols-2 gap-2">
-                          {caregiver.dateOfBirth && (
-                            <div className="bg-gray-50 p-3 rounded-xl">
-                              <p className="text-xs text-gray-500 font-medium mb-1">
-                                วันเกิด
-                              </p>
-                              <p className="text-gray-700 font-bold text-xs">
-                                {formatDateDisplay(caregiver.dateOfBirth)}
-                              </p>
-                            </div>
-                          )}
-                          {caregiver.gender && (
-                            <div className="bg-gray-50 p-3 rounded-xl">
-                              <p className="text-xs text-gray-500 font-medium mb-1">
-                                เพศ
-                              </p>
-                              <p className="text-gray-700 font-bold">
-                                {caregiver.gender === 'male' ? 'ชาย' : caregiver.gender === 'female' ? 'หญิง' : 'อื่นๆ'}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {(caregiver.subDistrict || caregiver.district || caregiver.province || caregiver.postalCode) && (
-                        <div className="bg-gray-50 p-3 rounded-xl">
-                          <p className="text-xs text-gray-500 font-medium mb-1">
-                            ที่อยู่เพิ่มเติม
-                          </p>
-                          <p className="text-gray-700 text-xs">
-                            {[caregiver.subDistrict, caregiver.district, caregiver.province, caregiver.postalCode].filter(Boolean).join(', ')}
-                          </p>
-                        </div>
-                      )}
-
-                      <div className="bg-gray-50 p-3 rounded-xl">
-                        <p className="text-xs text-gray-500 font-medium mb-1">
-                          วุฒิการศึกษา
-                        </p>
-                        <p className="text-gray-700">{caregiver.certificate}</p>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="bg-green-50 p-3 rounded-xl">
-                          <p className="text-xs text-green-600 font-medium mb-1">
-                            ประเภทการจ้าง
-                          </p>
-                          <p className="text-green-900 font-bold text-xs">
-                            {caregiver.employmentType === 'full-time' ? 'ประจำ' : 
-                             caregiver.employmentType === 'part-time' ? 'พาร์ทไทม์' : 
-                             'สัญญาจ้าง'}
-                          </p>
-                        </div>
-                        <div className="bg-green-50 p-3 rounded-xl">
-                          <p className="text-xs text-green-600 font-medium mb-1">
-                            ประเภทเงินเดือน
-                          </p>
-                          <p className="text-green-900 font-bold text-xs">
-                            {caregiver.salaryType === 'monthly' ? 'รายเดือน' : 
-                             caregiver.salaryType === 'daily' ? 'รายวัน' : 
-                             'รายชั่วโมง'}
-                          </p>
-                        </div>
-                      </div>
-
-                      {(caregiver.contractStartDate || caregiver.contractEndDate) && (
-                        <div className="grid grid-cols-2 gap-2">
-                          {caregiver.contractStartDate && (
-                            <div className="bg-orange-50 p-3 rounded-xl">
-                              <p className="text-xs text-orange-600 font-medium mb-1">
-                                วันที่เริ่มงาน
-                              </p>
-                              <p className="text-orange-900 font-bold text-xs">
-                                {formatDateDisplay(caregiver.contractStartDate)}
-                              </p>
-                            </div>
-                          )}
-                          {caregiver.contractEndDate && (
-                            <div className="bg-orange-50 p-3 rounded-xl">
-                              <p className="text-xs text-orange-600 font-medium mb-1">
-                                วันที่สิ้นสุดสัญญา
-                              </p>
-                              <p className="text-orange-900 font-bold text-xs">
-                                {formatDateDisplay(caregiver.contractEndDate)}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="bg-blue-50 p-3 rounded-xl">
-                          <p className="text-xs text-blue-600 font-medium mb-1">
-                            เงินเดือน
-                          </p>
-                          <p className="text-blue-900 font-bold">
-                            {parseFloat(caregiver.salary).toLocaleString()} บาท
-                          </p>
-                        </div>
-                        <div className="bg-purple-50 p-3 rounded-xl">
-                          <p className="text-xs text-purple-600 font-medium mb-1">
-                            เวลาทำงาน
-                          </p>
-                          <p className="text-purple-900 text-xs font-medium">
-                            {caregiver.workSchedule}
-                          </p>
-                        </div>
-                      </div>
-
-                      {(caregiver.idCardImage ||
-                        caregiver.certificateImage) && (
-                        <div className="bg-green-50 p-3 rounded-xl">
-                          <p className="text-xs text-green-700 font-medium mb-2 flex items-center gap-1">
-                            <FileText size={14} /> หลักฐานที่อัพโหลด
-                          </p>
-                          <div className="space-y-1">
-                            {caregiver.idCardImage && (
-                              <a
-                                href={caregiver.idCardImage}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs text-blue-600 hover:underline block"
-                              >
-                                📄 บัตรประชาชน
-                              </a>
-                            )}
-                            {caregiver.certificateImage && (
-                              <a
-                                href={caregiver.certificateImage}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs text-blue-600 hover:underline block"
-                              >
-                                📄 ใบรับรอง
-                              </a>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full font-bold">
+                                  รอยืนยัน
+                                </span>
+                                <button
+                                  onClick={() =>
+                                    handleVerifyCaregiver(
+                                      caregiver.id,
+                                      caregiver.name
+                                    )
+                                  }
+                                  className="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-full font-bold transition-colors flex items-center gap-1"
+                                  title="ยืนยันตัวตนผู้ดูแล"
+                                >
+                                  <CheckCircle2 size={12} /> ยืนยัน
+                                </button>
+                              </div>
                             )}
                           </div>
                         </div>
-                      )}
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleEditCaregiver(caregiver)}
+                          className="p-2 bg-blue-50 rounded-xl hover:bg-blue-100 text-blue-600 transition-colors"
+                        >
+                          <Edit size={18} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteCaregiver(caregiver.id)}
+                          className="p-2 bg-red-50 rounded-xl hover:bg-red-100 text-red-600 transition-colors"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    </div>
 
-                      {/* สถานะการเข้างานวันนี้ */}
-                      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-4 rounded-xl border-2 border-indigo-100">
-                        <div className="flex items-center justify-between mb-3">
-                          <h4 className="text-sm font-bold text-indigo-900 flex items-center gap-2">
-                            <Clock size={16} /> สถานะการเข้างานวันนี้
-                          </h4>
-                          {loadingAttendances ? (
-                            <div className="text-xs text-gray-400">กำลังโหลด...</div>
-                          ) : (
-                            getTodayAttendance(caregiver.id) ? (
-                              getAttendanceStatusBadge(getTodayAttendance(caregiver.id)!.status)
-                            ) : (
-                              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full border border-gray-200">
-                                ยังไม่มีข้อมูล
-                              </span>
-                            )
-                          )}
+                    {/* ข้อมูลหลัก */}
+                    <div className="grid grid-cols-2 gap-2 text-sm mb-3">
+                      <div className="flex items-center gap-2 text-gray-600">
+                        <Phone size={14} className="shrink-0" />
+                        <span className="truncate">{caregiver.phone}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-gray-600">
+                        <Send size={14} className="shrink-0" />
+                        <span className="truncate">{caregiver.email}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-gray-600">
+                        <User size={14} className="shrink-0" />
+                        <span className="truncate">
+                          บัตร: {caregiver.idCard.slice(0, 3)}***
+                          {caregiver.idCard.slice(-4)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-gray-600">
+                        <Clock size={14} className="shrink-0" />
+                        <span className="truncate">
+                          เริ่ม: {formatDateDisplay(caregiver.startDate)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Pairing Code */}
+                    <div className="bg-gradient-to-r from-purple-100 to-blue-100 rounded-xl p-3 mb-3 border-2 border-dashed border-purple-300">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <p className="text-xs text-purple-700 font-medium mb-1">
+                            รหัสจับคู่ (Pairing Code)
+                          </p>
+                          <p className="text-2xl font-bold text-purple-900 tracking-widest">
+                            {caregiver.pairingCode}
+                          </p>
+                          <p className="text-xs text-purple-600 mt-2">
+                            ผู้ดูแลใช้รหัสนี้เพื่อจับคู่กับผู้สูงอายุ
+                          </p>
                         </div>
-                        
-                        {!loadingAttendances && getTodayAttendance(caregiver.id) && (
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="bg-white p-3 rounded-lg">
-                              <p className="text-xs text-gray-500 mb-1">เข้างาน</p>
-                              <p className="text-lg font-bold text-green-600">
-                                {formatTime(getTodayAttendance(caregiver.id)!.checkInTime)}
-                              </p>
-                            </div>
-                            <div className="bg-white p-3 rounded-lg">
-                              <p className="text-xs text-gray-500 mb-1">ออกงาน</p>
-                              <p className="text-lg font-bold text-blue-600">
-                                {getTodayAttendance(caregiver.id)!.checkOutTime 
-                                  ? formatTime(getTodayAttendance(caregiver.id)!.checkOutTime)
-                                  : '-'}
-                              </p>
-                            </div>
-                            {getTodayAttendance(caregiver.id)!.hoursWorked > 0 && (
-                              <div className="col-span-2 bg-white p-3 rounded-lg">
-                                <div className="flex items-center justify-between">
-                                  <div>
-                                    <p className="text-xs text-gray-500 mb-1">ชั่วโมงทำงาน</p>
-                                    <p className="text-lg font-bold text-indigo-600">
-                                      {getTodayAttendance(caregiver.id)!.hoursWorked.toFixed(2)} ชม.
-                                    </p>
-                                  </div>
-                                  {getTodayAttendance(caregiver.id)!.isOvertime && (
-                                    <div className="text-right">
-                                      <p className="text-xs text-orange-500 mb-1">OT</p>
-                                      <p className="text-sm font-bold text-orange-600">
-                                        +{getTodayAttendance(caregiver.id)!.overtimeHours.toFixed(2)} ชม.
-                                      </p>
-                                    </div>
-                                  )}
-                                </div>
+                        <button
+                          onClick={() =>
+                            copyPairingCode(
+                              caregiver.pairingCode,
+                              caregiver.name
+                            )
+                          }
+                          className="bg-white hover:bg-purple-50 p-3 rounded-xl transition-colors border border-purple-200 active:scale-95"
+                          title="คัดลอกรหัส"
+                        >
+                          <Copy size={20} className="text-purple-600" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* รายละเอียดเพิ่มเติม - Collapsible */}
+                    <details className="group">
+                      <summary className="cursor-pointer text-purple-600 font-bold text-sm flex items-center gap-1 hover:text-purple-700 transition-colors">
+                        <ChevronRight
+                          size={16}
+                          className="group-open:rotate-90 transition-transform"
+                        />
+                        ดูรายละเอียดเพิ่มเติม
+                      </summary>
+                      <div className="mt-3 pt-3 border-t space-y-2 text-sm">
+                        <div className="bg-gray-50 p-3 rounded-xl">
+                          <p className="text-xs text-gray-500 font-medium mb-1">
+                            ที่อยู่
+                          </p>
+                          <p className="text-gray-700">{caregiver.address}</p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="bg-gray-50 p-3 rounded-xl">
+                            <p className="text-xs text-gray-500 font-medium mb-1">
+                              ผู้ติดต่อฉุกเฉิน
+                            </p>
+                            <p className="text-gray-700 font-bold text-xs">
+                              {caregiver.emergencyName}
+                            </p>
+                            <p className="text-gray-600 text-xs">
+                              {caregiver.emergencyContact}
+                            </p>
+                          </div>
+                          <div className="bg-gray-50 p-3 rounded-xl">
+                            <p className="text-xs text-gray-500 font-medium mb-1">
+                              ประสบการณ์
+                            </p>
+                            <p className="text-gray-700 font-bold">
+                              {caregiver.experience} ปี
+                            </p>
+                          </div>
+                        </div>
+
+                        {(caregiver.dateOfBirth || caregiver.gender) && (
+                          <div className="grid grid-cols-2 gap-2">
+                            {caregiver.dateOfBirth && (
+                              <div className="bg-gray-50 p-3 rounded-xl">
+                                <p className="text-xs text-gray-500 font-medium mb-1">
+                                  วันเกิด
+                                </p>
+                                <p className="text-gray-700 font-bold text-xs">
+                                  {formatDateDisplay(caregiver.dateOfBirth)}
+                                </p>
+                              </div>
+                            )}
+                            {caregiver.gender && (
+                              <div className="bg-gray-50 p-3 rounded-xl">
+                                <p className="text-xs text-gray-500 font-medium mb-1">
+                                  เพศ
+                                </p>
+                                <p className="text-gray-700 font-bold">
+                                  {caregiver.gender === "male"
+                                    ? "ชาย"
+                                    : caregiver.gender === "female"
+                                    ? "หญิง"
+                                    : "อื่นๆ"}
+                                </p>
                               </div>
                             )}
                           </div>
                         )}
-                        
-                        {!loadingAttendances && !getTodayAttendance(caregiver.id) && (
-                          <div className="text-center py-4">
-                            <p className="text-sm text-gray-500">ผู้ดูแลยังไม่ได้ลงเวลาเข้างานวันนี้</p>
+
+                        {(caregiver.subDistrict ||
+                          caregiver.district ||
+                          caregiver.province ||
+                          caregiver.postalCode) && (
+                          <div className="bg-gray-50 p-3 rounded-xl">
+                            <p className="text-xs text-gray-500 font-medium mb-1">
+                              ที่อยู่เพิ่มเติม
+                            </p>
+                            <p className="text-gray-700 text-xs">
+                              {[
+                                caregiver.subDistrict,
+                                caregiver.district,
+                                caregiver.province,
+                                caregiver.postalCode,
+                              ]
+                                .filter(Boolean)
+                                .join(", ")}
+                            </p>
                           </div>
                         )}
 
-                        {/* ดูประวัติการเข้างาน */}
-                        <button
-                          onClick={() => setSelectedCaregiverForAttendance(caregiver.id)}
-                          className="w-full mt-3 bg-white hover:bg-indigo-50 text-indigo-600 font-medium py-2 rounded-lg transition-colors border border-indigo-200 text-sm flex items-center justify-center gap-2"
-                        >
-                          <Calendar size={14} /> ดูประวัติการเข้างานทั้งหมด
-                        </button>
+                        <div className="bg-gray-50 p-3 rounded-xl">
+                          <p className="text-xs text-gray-500 font-medium mb-1">
+                            วุฒิการศึกษา
+                          </p>
+                          <p className="text-gray-700">
+                            {caregiver.certificate}
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="bg-green-50 p-3 rounded-xl">
+                            <p className="text-xs text-green-600 font-medium mb-1">
+                              ประเภทการจ้าง
+                            </p>
+                            <p className="text-green-900 font-bold text-xs">
+                              {caregiver.employmentType === "full-time"
+                                ? "ประจำ"
+                                : caregiver.employmentType === "part-time"
+                                ? "พาร์ทไทม์"
+                                : "สัญญาจ้าง"}
+                            </p>
+                          </div>
+                          <div className="bg-green-50 p-3 rounded-xl">
+                            <p className="text-xs text-green-600 font-medium mb-1">
+                              ประเภทเงินเดือน
+                            </p>
+                            <p className="text-green-900 font-bold text-xs">
+                              {caregiver.salaryType === "monthly"
+                                ? "รายเดือน"
+                                : caregiver.salaryType === "daily"
+                                ? "รายวัน"
+                                : "รายชั่วโมง"}
+                            </p>
+                          </div>
+                        </div>
+
+                        {(caregiver.contractStartDate ||
+                          caregiver.contractEndDate) && (
+                          <div className="grid grid-cols-2 gap-2">
+                            {caregiver.contractStartDate && (
+                              <div className="bg-orange-50 p-3 rounded-xl">
+                                <p className="text-xs text-orange-600 font-medium mb-1">
+                                  วันที่เริ่มงาน
+                                </p>
+                                <p className="text-orange-900 font-bold text-xs">
+                                  {formatDateDisplay(
+                                    caregiver.contractStartDate
+                                  )}
+                                </p>
+                              </div>
+                            )}
+                            {caregiver.contractEndDate && (
+                              <div className="bg-orange-50 p-3 rounded-xl">
+                                <p className="text-xs text-orange-600 font-medium mb-1">
+                                  วันที่สิ้นสุดสัญญา
+                                </p>
+                                <p className="text-orange-900 font-bold text-xs">
+                                  {formatDateDisplay(caregiver.contractEndDate)}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="bg-blue-50 p-3 rounded-xl">
+                            <p className="text-xs text-blue-600 font-medium mb-1">
+                              เงินเดือน
+                            </p>
+                            <p className="text-blue-900 font-bold">
+                              {parseFloat(caregiver.salary).toLocaleString()}{" "}
+                              บาท
+                            </p>
+                          </div>
+                          <div className="bg-purple-50 p-3 rounded-xl">
+                            <p className="text-xs text-purple-600 font-medium mb-1">
+                              เวลาทำงาน
+                            </p>
+                            <p className="text-purple-900 text-xs font-medium">
+                              {caregiver.workSchedule}
+                            </p>
+                          </div>
+                        </div>
+
+                        {(caregiver.idCardImage ||
+                          caregiver.certificateImage) && (
+                          <div className="bg-green-50 p-3 rounded-xl">
+                            <p className="text-xs text-green-700 font-medium mb-2 flex items-center gap-1">
+                              <FileText size={14} /> หลักฐานที่อัพโหลด
+                            </p>
+                            <div className="space-y-1">
+                              {caregiver.idCardImage && (
+                                <a
+                                  href={caregiver.idCardImage}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-blue-600 hover:underline block"
+                                >
+                                  📄 บัตรประชาชน
+                                </a>
+                              )}
+                              {caregiver.certificateImage && (
+                                <a
+                                  href={caregiver.certificateImage}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-blue-600 hover:underline block"
+                                >
+                                  📄 ใบรับรอง
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* สถานะการเข้างานวันนี้ */}
+                        <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-4 rounded-xl border-2 border-indigo-100">
+                          <div className="flex items-center justify-between mb-3">
+                            <h4 className="text-sm font-bold text-indigo-900 flex items-center gap-2">
+                              <Clock size={16} /> สถานะการเข้างานวันนี้
+                            </h4>
+                            {loadingAttendances ? (
+                              <div className="text-xs text-gray-400">
+                                กำลังโหลด...
+                              </div>
+                            ) : getTodayAttendance(caregiver.id) ? (
+                              getAttendanceStatusBadge(
+                                getTodayAttendance(caregiver.id)!.status
+                              )
+                            ) : (
+                              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full border border-gray-200">
+                                ยังไม่มีข้อมูล
+                              </span>
+                            )}
+                          </div>
+
+                          {!loadingAttendances &&
+                            getTodayAttendance(caregiver.id) && (
+                              <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-white p-3 rounded-lg">
+                                  <p className="text-xs text-gray-500 mb-1">
+                                    เข้างาน
+                                  </p>
+                                  <p className="text-lg font-bold text-green-600">
+                                    {formatTime(
+                                      getTodayAttendance(caregiver.id)!
+                                        .checkInTime
+                                    )}
+                                  </p>
+                                </div>
+                                <div className="bg-white p-3 rounded-lg">
+                                  <p className="text-xs text-gray-500 mb-1">
+                                    ออกงาน
+                                  </p>
+                                  <p className="text-lg font-bold text-blue-600">
+                                    {getTodayAttendance(caregiver.id)!
+                                      .checkOutTime
+                                      ? formatTime(
+                                          getTodayAttendance(caregiver.id)!
+                                            .checkOutTime
+                                        )
+                                      : "-"}
+                                  </p>
+                                </div>
+                                {getTodayAttendance(caregiver.id)!.hoursWorked >
+                                  0 && (
+                                  <div className="col-span-2 bg-white p-3 rounded-lg">
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <p className="text-xs text-gray-500 mb-1">
+                                          ชั่วโมงทำงาน
+                                        </p>
+                                        <p className="text-lg font-bold text-indigo-600">
+                                          {getTodayAttendance(
+                                            caregiver.id
+                                          )!.hoursWorked.toFixed(2)}{" "}
+                                          ชม.
+                                        </p>
+                                      </div>
+                                      {getTodayAttendance(caregiver.id)!
+                                        .isOvertime && (
+                                        <div className="text-right">
+                                          <p className="text-xs text-orange-500 mb-1">
+                                            OT
+                                          </p>
+                                          <p className="text-sm font-bold text-orange-600">
+                                            +
+                                            {getTodayAttendance(
+                                              caregiver.id
+                                            )!.overtimeHours.toFixed(2)}{" "}
+                                            ชม.
+                                          </p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                          {!loadingAttendances &&
+                            !getTodayAttendance(caregiver.id) && (
+                              <div className="text-center py-4">
+                                <p className="text-sm text-gray-500">
+                                  ผู้ดูแลยังไม่ได้ลงเวลาเข้างานวันนี้
+                                </p>
+                              </div>
+                            )}
+
+                          {/* ดูประวัติการเข้างาน */}
+                          <button
+                            onClick={() =>
+                              setSelectedCaregiverForAttendance(caregiver.id)
+                            }
+                            className="w-full mt-3 bg-white hover:bg-indigo-50 text-indigo-600 font-medium py-2 rounded-lg transition-colors border border-indigo-200 text-sm flex items-center justify-center gap-2"
+                          >
+                            <Calendar size={14} /> ดูประวัติการเข้างานทั้งหมด
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  </details>
-                </div>
-              ))
+                    </details>
+                  </div>
+                ))
               )}
             </div>
           </div>
@@ -2775,13 +2694,14 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                 bills.map((bill) => {
                   // แปลงหมวดหมู่เป็นภาษาไทย
                   const categoryMap: { [key: string]: string } = {
-                    medical: 'ค่ารักษาพยาบาล',
-                    food: 'ค่าอาหาร',
-                    caregiver: 'ค่าผู้ดูแล',
-                    other: 'อื่นๆ'
+                    medical: "ค่ารักษาพยาบาล",
+                    food: "ค่าอาหาร",
+                    caregiver: "ค่าผู้ดูแล",
+                    other: "อื่นๆ",
                   };
-                  const categoryText = categoryMap[bill.category] || bill.category;
-                  
+                  const categoryText =
+                    categoryMap[bill.category] || bill.category;
+
                   return (
                     <div
                       key={bill.id}
@@ -2808,24 +2728,25 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                               {bill.isPaid ? "จ่ายแล้ว ✓" : "ยังไม่จ่าย"}
                             </span>
                           </div>
-                          
+
                           {/* วันที่ */}
                           <p className="text-sm text-gray-500 mb-2">
-                            {new Date(bill.date).toLocaleDateString('th-TH', {
-                              year: 'numeric',
-                              month: 'long',
-                              day: 'numeric'
+                            {new Date(bill.date).toLocaleDateString("th-TH", {
+                              year: "numeric",
+                              month: "long",
+                              day: "numeric",
                             })}
                           </p>
-                          
+
                           {/* จำนวนเงิน */}
                           <p className="text-2xl font-bold text-gray-900 mt-2 mb-3">
-                            {Number(bill.amount).toLocaleString('th-TH', { 
+                            {Number(bill.amount).toLocaleString("th-TH", {
                               minimumFractionDigits: 0,
-                              maximumFractionDigits: 2 
-                            })} บาท
+                              maximumFractionDigits: 2,
+                            })}{" "}
+                            บาท
                           </p>
-                          
+
                           {/* หมวดหมู่และผู้สร้าง */}
                           <div className="flex flex-wrap gap-2 items-center">
                             <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs font-medium">
@@ -2838,7 +2759,7 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                             )}
                           </div>
                         </div>
-                        
+
                         {/* ปุ่มจัดการ */}
                         <div className="flex gap-2">
                           <button
@@ -2848,7 +2769,11 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                                 ? "bg-gray-100 text-gray-600 hover:bg-gray-200"
                                 : "bg-green-100 text-green-600 hover:bg-green-200"
                             }`}
-                            title={bill.isPaid ? "ยกเลิกจ่ายแล้ว" : "ทำเครื่องหมายจ่ายแล้ว"}
+                            title={
+                              bill.isPaid
+                                ? "ยกเลิกจ่ายแล้ว"
+                                : "ทำเครื่องหมายจ่ายแล้ว"
+                            }
                           >
                             {bill.isPaid ? (
                               <XCircle size={18} />
@@ -3347,7 +3272,11 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                               ? "bg-green-500 hover:bg-green-600"
                               : "bg-gray-100 hover:bg-gray-200"
                           }`}
-                          title={activity.completed ? "คลิกเพื่อยกเลิกการทำเสร็จ" : "คลิกเพื่อทำเสร็จ"}
+                          title={
+                            activity.completed
+                              ? "คลิกเพื่อยกเลิกการทำเสร็จ"
+                              : "คลิกเพื่อทำเสร็จ"
+                          }
                         >
                           {activity.completed && (
                             <CheckCircle2 size={24} className="text-white" />
@@ -3363,9 +3292,13 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                           >
                             {activity.title}
                           </h3>
-                          <p className={`text-sm mt-1 ${
-                            activity.completed ? "text-gray-400" : "text-gray-600"
-                          }`}>
+                          <p
+                            className={`text-sm mt-1 ${
+                              activity.completed
+                                ? "text-gray-400"
+                                : "text-gray-600"
+                            }`}
+                          >
                             {activity.description}
                           </p>
                           <div className="flex items-center gap-4 mt-2">
@@ -3377,13 +3310,19 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                             </div>
                             {activity.completed && activity.completedAt && (
                               <div className="flex items-center gap-2">
-                                <CheckCircle2 size={14} className="text-green-500" />
+                                <CheckCircle2
+                                  size={14}
+                                  className="text-green-500"
+                                />
                                 <span className="text-xs text-green-600">
-                                  ทำเสร็จ {new Date(activity.completedAt).toLocaleString('th-TH', {
-                                    day: '2-digit',
-                                    month: 'short',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
+                                  ทำเสร็จ{" "}
+                                  {new Date(
+                                    activity.completedAt
+                                  ).toLocaleString("th-TH", {
+                                    day: "2-digit",
+                                    month: "short",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
                                   })}
                                 </span>
                               </div>
@@ -3415,26 +3354,173 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
           </div>
         )}
 
-        {/* MEDICATIONS TAB */}
-        {activeTab === "medications" && selectedElder && (
-          <div className="animate-in fade-in duration-300">
-            <MedicationsTab 
-              elderId={selectedElder.id} 
-              elderName={selectedElder.name} 
-            />
-          </div>
-        )}
-
         {/* HEALTH TAB */}
         {activeTab === "health" && selectedElder && (
           <div className="animate-in fade-in duration-300">
             <div className="space-y-6">
-              <HealthRiskCard 
-                elderId={selectedElder.id} 
-                elderName={selectedElder.name} 
-              />
-              
-              {/* Health Records Section (existing) can be added here */}
+              {/* Mood Overview from Daily Reports */}
+              <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-3xl p-6 shadow-sm border border-purple-100">
+                <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                  <Heart className="text-purple-600" size={24} />
+                  อารมณ์ของ{selectedElder.name}
+                </h3>
+                {loadingReports ? (
+                  <div className="text-center py-4">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-600 mx-auto"></div>
+                    <p className="mt-2 text-sm text-gray-500">กำลังโหลด...</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 gap-3">
+                    {(() => {
+                      const moodCounts = { happy: 0, neutral: 0, sad: 0 };
+                      reports.forEach(r => {
+                        if (r.overallMood === 'happy') moodCounts.happy++;
+                        else if (r.overallMood === 'sad') moodCounts.sad++;
+                        else if (r.overallMood === 'neutral') moodCounts.neutral++;
+                      });
+                      return (
+                        <>
+                          <div className="bg-white rounded-2xl p-4 text-center">
+                            <div className="text-3xl mb-2">😊</div>
+                            <p className="text-2xl font-bold text-green-600">{moodCounts.happy}</p>
+                            <p className="text-xs text-gray-500">วันที่แจ่มใส</p>
+                          </div>
+                          <div className="bg-white rounded-2xl p-4 text-center">
+                            <div className="text-3xl mb-2">😐</div>
+                            <p className="text-2xl font-bold text-yellow-600">{moodCounts.neutral}</p>
+                            <p className="text-xs text-gray-500">วันที่ปกติ</p>
+                          </div>
+                          <div className="bg-white rounded-2xl p-4 text-center">
+                            <div className="text-3xl mb-2">😔</div>
+                            <p className="text-2xl font-bold text-red-600">{moodCounts.sad}</p>
+                            <p className="text-xs text-gray-500">วันที่ไม่สบายใจ</p>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+
+              {/* Latest Health Record */}
+              {latestHealth && (
+                <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
+                  <h3 className="text-lg font-bold text-gray-800 mb-4">
+                    บันทึกล่าสุด
+                  </h3>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">ประเภท:</span>
+                      <span className="font-semibold text-gray-800">
+                        {latestHealth.type === 'vital-sign' ? 'สัญญาณชีพ' : 
+                         latestHealth.type === 'observation' ? 'การสังเกต' : latestHealth.type}
+                      </span>
+                    </div>
+                    {latestHealth.systolic && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600">ความดันโลหิต:</span>
+                        <span className="font-semibold text-gray-800">
+                          {latestHealth.systolic}/{latestHealth.diastolic} mmHg
+                        </span>
+                      </div>
+                    )}
+                    {latestHealth.heartRate && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600">อัตราการเต้นของหัวใจ:</span>
+                        <span className="font-semibold text-gray-800">
+                          {latestHealth.heartRate} ครั้ง/นาที
+                        </span>
+                      </div>
+                    )}
+                    {latestHealth.temperature && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600">อุณหภูมิ:</span>
+                        <span className="font-semibold text-gray-800">
+                          {latestHealth.temperature} °C
+                        </span>
+                      </div>
+                    )}
+                    {latestHealth.observation && (
+                      <div className="mt-3 p-3 bg-gray-50 rounded-xl">
+                        <p className="text-sm text-gray-600 mb-1">การสังเกต:</p>
+                        <p className="text-gray-800">{latestHealth.observation}</p>
+                      </div>
+                    )}
+                    {latestHealth.notes && (
+                      <div className="mt-3 p-3 bg-gray-50 rounded-xl">
+                        <p className="text-sm text-gray-600 mb-1">หมายเหตุ:</p>
+                        <p className="text-gray-800">{latestHealth.notes}</p>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center text-sm text-gray-500 pt-2 border-t">
+                      <span>บันทึกโดย: {latestHealth.caregiver?.name || 'ไม่ระบุ'}</span>
+                      <span>{new Date(latestHealth.recordedAt).toLocaleDateString('th-TH')}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Health Records History */}
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
+                <h3 className="text-lg font-bold text-gray-800 mb-4">
+                  ประวัติการบันทึกสุขภาพ
+                </h3>
+                {loadingHealth ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
+                    <p className="mt-2 text-sm text-gray-500">กำลังโหลด...</p>
+                  </div>
+                ) : healthRecords.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <Heart size={48} className="mx-auto mb-2 opacity-20" />
+                    <p>ยังไม่มีบันทึกสุขภาพ</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {healthRecords.map((record) => (
+                      <div
+                        key={record.id}
+                        className="p-4 bg-gray-50 rounded-2xl border border-gray-100 hover:shadow-md transition-shadow"
+                      >
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${
+                              record.severity === 'urgent' ? 'bg-red-500' :
+                              record.severity === 'concern' ? 'bg-yellow-500' : 'bg-green-500'
+                            }`}></div>
+                            <span className="font-semibold text-gray-800">
+                              {record.type === 'vital-sign' ? 'สัญญาณชีพ' : 
+                               record.type === 'observation' ? 'การสังเกต' : record.type}
+                            </span>
+                          </div>
+                          <span className="text-xs text-gray-500">
+                            {new Date(record.recordedAt).toLocaleDateString('th-TH', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric'
+                            })}
+                          </span>
+                        </div>
+                        {record.systolic && (
+                          <p className="text-sm text-gray-600">
+                            ความดัน: {record.systolic}/{record.diastolic} mmHg
+                            {record.heartRate && ` | ชีพจร: ${record.heartRate} ครั้ง/นาที`}
+                          </p>
+                        )}
+                        {record.observation && (
+                          <p className="text-sm text-gray-700 mt-1">{record.observation}</p>
+                        )}
+                        {record.notes && (
+                          <p className="text-xs text-gray-500 mt-2 italic">{record.notes}</p>
+                        )}
+                        <p className="text-xs text-gray-400 mt-2">
+                          บันทึกโดย: {record.caregiver?.name || 'ไม่ระบุ'}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -3517,23 +3603,6 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
           <span className="text-xs font-bold">กิจกรรม</span>
         </button>
         <button
-          onClick={() => setActiveTab("medications")}
-          className={`flex flex-col items-center p-2 w-full transition-all active:scale-90 ${
-            activeTab === "medications"
-              ? "text-purple-600"
-              : "text-gray-400 hover:text-gray-600"
-          }`}
-        >
-          <div
-            className={`p-1 rounded-xl mb-1 ${
-              activeTab === "medications" ? "bg-purple-50" : ""
-            }`}
-          >
-            <Pill size={26} strokeWidth={activeTab === "medications" ? 2.5 : 2} />
-          </div>
-          <span className="text-xs font-bold">ยา</span>
-        </button>
-        <button
           onClick={() => setActiveTab("health")}
           className={`flex flex-col items-center p-2 w-full transition-all active:scale-90 ${
             activeTab === "health"
@@ -3570,23 +3639,6 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
           </div>
           <span className="text-xs font-bold">ปฏิทิน</span>
         </button>
-        <button
-          onClick={() => setActiveTab("moods")}
-          className={`flex flex-col items-center p-2 w-full transition-all active:scale-90 ${
-            activeTab === "moods"
-              ? "text-purple-600"
-              : "text-gray-400 hover:text-gray-600"
-          }`}
-        >
-          <div
-            className={`p-1 rounded-xl mb-1 ${
-              activeTab === "moods" ? "bg-purple-50" : ""
-            }`}
-          >
-            <TrendingUp size={26} strokeWidth={activeTab === "moods" ? 2.5 : 2} />
-          </div>
-          <span className="text-xs font-bold">อารมณ์</span>
-        </button>
       </div>
 
       <CustomAlert
@@ -3596,151 +3648,6 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
         type={alert.type}
         onClose={() => setAlert({ ...alert, isOpen: false })}
       />
-
-      {/* Reports Modal */}
-      {showReportsModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 animate-in fade-in duration-200">
-          <div className="bg-gradient-to-b from-blue-50 to-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl max-h-[85vh] overflow-hidden animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 duration-300 shadow-2xl">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-blue-600 to-cyan-600 p-6 pb-8 sticky top-0 z-10">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h2 className="text-2xl font-bold text-white flex items-center gap-2 mb-1">
-                    <FileText size={28} />
-                    รายงานทั้งหมด
-                  </h2>
-                  <p className="text-blue-100 text-sm">
-                    ประวัติการดูแล {reports.length} รายการ
-                  </p>
-                </div>
-                <button
-                  onClick={() => setShowReportsModal(false)}
-                  className="p-2 hover:bg-white/20 rounded-full transition-colors"
-                >
-                  <X size={28} className="text-white" />
-                </button>
-              </div>
-            </div>
-
-            {/* Content */}
-            <div className="overflow-y-auto max-h-[calc(85vh-140px)] p-5 space-y-4">
-              {loadingReports ? (
-                <div className="text-center py-12 text-gray-500">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-                  <p className="mt-4 text-sm">กำลังโหลดรายงาน...</p>
-                </div>
-              ) : reports.length === 0 ? (
-                <div className="text-center py-12 text-gray-500">
-                  <FileText size={64} className="mx-auto mb-4 opacity-20" />
-                  <p className="text-lg font-bold mb-2">ยังไม่มีรายงาน</p>
-                  <p className="text-sm">รอผู้ดูแลส่งรายงานประจำวัน</p>
-                </div>
-              ) : (
-                reports.map((report, index) => (
-                  <div
-                    key={report.id}
-                    className={`bg-white rounded-2xl p-5 shadow-md border-2 transition-all hover:shadow-lg ${
-                      report.status === "read"
-                        ? "border-green-200 hover:border-green-300"
-                        : "border-blue-200 hover:border-blue-300"
-                    }`}
-                    style={{ animationDelay: `${index * 50}ms` }}
-                  >
-                    <div className="flex items-start gap-4 mb-4">
-                      <div
-                        className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${
-                          report.status === "read"
-                            ? "bg-gradient-to-br from-green-400 to-emerald-500"
-                            : "bg-gradient-to-br from-blue-400 to-cyan-500"
-                        }`}
-                      >
-                        <FileText size={28} className="text-white" />
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="font-bold text-gray-800 text-lg mb-1">
-                          รายงานประจำวัน
-                        </h3>
-                        <div className="flex items-center gap-2 text-gray-500">
-                          <Clock size={14} />
-                          <span className="text-sm">
-                            {new Date(report.date).toLocaleDateString('th-TH')}
-                          </span>
-                          {report.caregiver && (
-                            <>
-                              <span className="text-gray-300">•</span>
-                              <span className="text-sm">โดย {report.caregiver.name}</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-3">
-                      {report.moodStatus && (
-                        <div className="rounded-xl p-4 bg-purple-50">
-                          <p className="text-xs text-purple-600 font-bold mb-1">อารมณ์</p>
-                          <p className="text-sm text-gray-700">{report.moodStatus}</p>
-                        </div>
-                      )}
-                      
-                      {report.activities && (
-                        <div className="rounded-xl p-4 bg-blue-50">
-                          <p className="text-xs text-blue-600 font-bold mb-1">กิจกรรม</p>
-                          <p className="text-sm text-gray-700">{report.activities}</p>
-                        </div>
-                      )}
-                      
-                      {report.meals && (
-                        <div className="rounded-xl p-4 bg-orange-50">
-                          <p className="text-xs text-orange-600 font-bold mb-1">มื้ออาหาร</p>
-                          <p className="text-sm text-gray-700">{report.meals}</p>
-                        </div>
-                      )}
-                      
-                      {report.healthNotes && (
-                        <div className="rounded-xl p-4 bg-green-50">
-                          <p className="text-xs text-green-600 font-bold mb-1">สุขภาพ</p>
-                          <p className="text-sm text-gray-700">{report.healthNotes}</p>
-                        </div>
-                      )}
-                      
-                      {report.notes && (
-                        <div className="rounded-xl p-4 bg-gray-50">
-                          <p className="text-xs text-gray-600 font-bold mb-1">หมายเหตุ</p>
-                          <p className="text-sm text-gray-700">{report.notes}</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Status Badge */}
-                    <div className="mt-3 flex justify-end">
-                      <span
-                        className={`text-xs px-3 py-1.5 rounded-full font-bold ${
-                          report.status === "read"
-                            ? "bg-green-100 text-green-700"
-                            : "bg-blue-100 text-blue-700"
-                        }`}
-                      >
-                        {report.status === "read" ? "✓ อ่านแล้ว" : "📝 ใหม่"}
-                      </span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="sticky bottom-0 bg-white border-t p-4 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
-              <button
-                onClick={() => setShowReportsModal(false)}
-                className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-bold py-4 rounded-2xl transition-all active:scale-95 shadow-lg"
-              >
-                ปิด
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Notifications Modal */}
       {showNotifications && (
@@ -3814,7 +3721,9 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                         <div className="flex items-center gap-2">
                           <Clock size={12} className="text-gray-400" />
                           <span className="text-xs text-gray-500">
-                            {new Date(notification.createdAt).toLocaleString('th-TH')}
+                            {new Date(notification.createdAt).toLocaleString(
+                              "th-TH"
+                            )}
                           </span>
                         </div>
                       </div>
@@ -3919,51 +3828,6 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                 </div>
               </div>
 
-              {/* Recent Health Reports */}
-              <div className="bg-white rounded-2xl p-5 shadow-md border-2 border-purple-200">
-                <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
-                  <Activity size={20} className="text-purple-600" />
-                  บันทึกสุขภาพล่าสุด (10 รายการ)
-                </h3>
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {reports.slice(0, 10).map((r) => (
-                    <div
-                      key={r.id}
-                      className={`p-3 rounded-xl ${
-                        r.status === "success" ? "bg-green-50" : "bg-yellow-50"
-                      }`}
-                    >
-                      <div className="flex items-start gap-2">
-                        <div
-                          className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
-                            r.status === "success"
-                              ? "bg-green-500"
-                              : "bg-yellow-500"
-                          }`}
-                        >
-                          {r.status === "success" ? (
-                            <CheckCircle2 size={14} className="text-white" />
-                          ) : (
-                            <AlertCircle size={14} className="text-white" />
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-bold text-sm text-gray-800">
-                            {r.title}
-                          </p>
-                          <p className="text-xs text-gray-600 mt-1">
-                            {r.details}
-                          </p>
-                          <p className="text-xs text-gray-400 mt-1">
-                            {r.date} {r.time} น.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
               {/* Activities */}
               <div className="bg-white rounded-2xl p-5 shadow-md border-2 border-indigo-200">
                 <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
@@ -4020,14 +3884,7 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
             </div>
 
             {/* Footer */}
-            <div className="sticky bottom-0 bg-white border-t p-4 shadow-[0_-5px_20px_rgba(0,0,0,0.05)] space-y-3">
-              <button
-                onClick={exportHealthReport}
-                className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold py-4 rounded-2xl transition-all active:scale-95 shadow-lg flex items-center justify-center gap-2"
-              >
-                <Download size={20} />
-                ดาวน์โหลดรายงาน PDF
-              </button>
+            <div className="sticky bottom-0 bg-white border-t p-4 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
               <button
                 onClick={() => setShowHealthReport(false)}
                 className="w-full bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-3 rounded-2xl transition-colors"
@@ -4058,7 +3915,9 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
               </button>
               <button
                 className="flex-1 py-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-700"
-                onClick={() => handleDeleteAppointmentConfirmed(confirmDeleteId)}
+                onClick={() =>
+                  handleDeleteAppointmentConfirmed(confirmDeleteId)
+                }
               >
                 ลบ
               </button>
@@ -4086,7 +3945,9 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
               </button>
               <button
                 className="flex-1 py-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-700 transition-colors"
-                onClick={() => handleDeleteActivityConfirmed(confirmDeleteActivityId)}
+                onClick={() =>
+                  handleDeleteActivityConfirmed(confirmDeleteActivityId)
+                }
               >
                 ลบ
               </button>
@@ -4142,7 +4003,9 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
               </button>
               <button
                 className="flex-1 py-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-700 transition-colors"
-                onClick={() => handleDeleteCaregiverConfirmed(confirmDeleteCaregiverId)}
+                onClick={() =>
+                  handleDeleteCaregiverConfirmed(confirmDeleteCaregiverId)
+                }
               >
                 ลบ
               </button>
@@ -4164,7 +4027,11 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                     ประวัติการเข้างาน
                   </h2>
                   <p className="text-purple-100 mt-1">
-                    {caregivers.find(c => c.id === selectedCaregiverForAttendance)?.name}
+                    {
+                      caregivers.find(
+                        (c) => c.id === selectedCaregiverForAttendance
+                      )?.name
+                    }
                   </p>
                 </div>
                 <button
@@ -4184,66 +4051,84 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                 </div>
               ) : (
                 <>
-                  {caregiverAttendances[selectedCaregiverForAttendance]?.length > 0 ? (
-                    caregiverAttendances[selectedCaregiverForAttendance].map((attendance) => (
-                      <div
-                        key={attendance.id}
-                        className="bg-white border-2 border-gray-100 rounded-2xl p-4 hover:border-indigo-200 transition-all"
-                      >
-                        <div className="flex items-start justify-between mb-3">
-                          <div>
-                            <p className="font-bold text-gray-800">
-                              {new Date(attendance.workDate).toLocaleDateString('th-TH', {
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric',
-                                weekday: 'long'
-                              })}
-                            </p>
+                  {caregiverAttendances[selectedCaregiverForAttendance]
+                    ?.length > 0 ? (
+                    caregiverAttendances[selectedCaregiverForAttendance].map(
+                      (attendance) => (
+                        <div
+                          key={attendance.id}
+                          className="bg-white border-2 border-gray-100 rounded-2xl p-4 hover:border-indigo-200 transition-all"
+                        >
+                          <div className="flex items-start justify-between mb-3">
+                            <div>
+                              <p className="font-bold text-gray-800">
+                                {new Date(
+                                  attendance.workDate
+                                ).toLocaleDateString("th-TH", {
+                                  year: "numeric",
+                                  month: "long",
+                                  day: "numeric",
+                                  weekday: "long",
+                                })}
+                              </p>
+                            </div>
+                            {getAttendanceStatusBadge(attendance.status)}
                           </div>
-                          {getAttendanceStatusBadge(attendance.status)}
-                        </div>
 
-                        <div className="grid grid-cols-2 gap-3 mt-3">
-                          <div className="bg-green-50 p-3 rounded-xl">
-                            <p className="text-xs text-green-600 mb-1">เข้างาน</p>
-                            <p className="text-lg font-bold text-green-700">
-                              {formatTime(attendance.checkInTime)}
-                            </p>
-                          </div>
-                          <div className="bg-blue-50 p-3 rounded-xl">
-                            <p className="text-xs text-blue-600 mb-1">ออกงาน</p>
-                            <p className="text-lg font-bold text-blue-700">
-                              {attendance.checkOutTime 
-                                ? formatTime(attendance.checkOutTime)
-                                : '-'}
-                            </p>
-                          </div>
-                          {attendance.hoursWorked > 0 && (
-                            <>
-                              <div className="bg-indigo-50 p-3 rounded-xl">
-                                <p className="text-xs text-indigo-600 mb-1">ชั่วโมงทำงาน</p>
-                                <p className="text-lg font-bold text-indigo-700">
-                                  {attendance.hoursWorked.toFixed(2)} ชม.
-                                </p>
-                              </div>
-                              {attendance.isOvertime && (
-                                <div className="bg-orange-50 p-3 rounded-xl">
-                                  <p className="text-xs text-orange-600 mb-1">OT</p>
-                                  <p className="text-lg font-bold text-orange-700">
-                                    +{attendance.overtimeHours.toFixed(2)} ชม.
+                          <div className="grid grid-cols-2 gap-3 mt-3">
+                            <div className="bg-green-50 p-3 rounded-xl">
+                              <p className="text-xs text-green-600 mb-1">
+                                เข้างาน
+                              </p>
+                              <p className="text-lg font-bold text-green-700">
+                                {formatTime(attendance.checkInTime)}
+                              </p>
+                            </div>
+                            <div className="bg-blue-50 p-3 rounded-xl">
+                              <p className="text-xs text-blue-600 mb-1">
+                                ออกงาน
+                              </p>
+                              <p className="text-lg font-bold text-blue-700">
+                                {attendance.checkOutTime
+                                  ? formatTime(attendance.checkOutTime)
+                                  : "-"}
+                              </p>
+                            </div>
+                            {attendance.hoursWorked > 0 && (
+                              <>
+                                <div className="bg-indigo-50 p-3 rounded-xl">
+                                  <p className="text-xs text-indigo-600 mb-1">
+                                    ชั่วโมงทำงาน
+                                  </p>
+                                  <p className="text-lg font-bold text-indigo-700">
+                                    {attendance.hoursWorked.toFixed(2)} ชม.
                                   </p>
                                 </div>
-                              )}
-                            </>
-                          )}
+                                {attendance.isOvertime && (
+                                  <div className="bg-orange-50 p-3 rounded-xl">
+                                    <p className="text-xs text-orange-600 mb-1">
+                                      OT
+                                    </p>
+                                    <p className="text-lg font-bold text-orange-700">
+                                      +{attendance.overtimeHours.toFixed(2)} ชม.
+                                    </p>
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))
+                      )
+                    )
                   ) : (
                     <div className="text-center py-12">
-                      <Calendar size={48} className="mx-auto text-gray-300 mb-3" />
-                      <p className="text-gray-400 font-medium">ยังไม่มีประวัติการเข้างาน</p>
+                      <Calendar
+                        size={48}
+                        className="mx-auto text-gray-300 mb-3"
+                      />
+                      <p className="text-gray-400 font-medium">
+                        ยังไม่มีประวัติการเข้างาน
+                      </p>
                       <p className="text-gray-400 text-sm mt-1">
                         ผู้ดูแลจะต้องลงเวลาเข้า-ออกงานผ่านแอปพลิเคชัน
                       </p>
@@ -4260,6 +4145,44 @@ export default function FamilyDashboard({ selectedElder, onBack }: Props) {
                 className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-2xl transition-colors"
               >
                 ปิด
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Delete Bill Dialog */}
+      {confirmDeleteBillId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl animate-in fade-in zoom-in duration-200">
+            <div className="text-center mb-6">
+              <div className="bg-red-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertCircle size={32} className="text-red-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-800 mb-2">
+                ยืนยันการลบรายการ
+              </h3>
+              <p className="text-gray-600 text-sm">
+                คุณแน่ใจหรือไม่ว่าต้องการลบรายการนี้? 
+                <br />
+                การกระทำนี้ไม่สามารถย้อนกลับได้
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmDeleteBillId(null)}
+                className="flex-1 bg-gray-100 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-200 transition-colors"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={() => {
+                  handleDeleteBillConfirmed(confirmDeleteBillId);
+                  setConfirmDeleteBillId(null);
+                }}
+                className="flex-1 bg-red-600 text-white font-bold py-3 rounded-xl hover:bg-red-700 transition-colors"
+              >
+                ลบ
               </button>
             </div>
           </div>

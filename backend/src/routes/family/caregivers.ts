@@ -77,9 +77,6 @@ router.post('/', async (req: Request, res: Response) => {
       elderId
     } = req.body;
 
-    // Generate pairing code (6 ตัว)
-    const pairingCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-
     const caregiver = await prisma.caregiver.create({
       data: {
         name,
@@ -99,7 +96,7 @@ router.post('/', async (req: Request, res: Response) => {
         emergencyRelation,
         experience,
         certificate,
-        salary: salary ? String(salary) : "0", // แปลงเป็น string เพื่อรักษา precision
+        salary: salary ? String(salary) : "0", // แปลงเป็น decimal
         salaryType,
         employmentType,
         workSchedule,
@@ -107,7 +104,6 @@ router.post('/', async (req: Request, res: Response) => {
         contractEndDate: contractEndDate ? new Date(contractEndDate) : null,
         idCardImage,
         certificateImage,
-        pairingCode,
         elderId
       }
     });
